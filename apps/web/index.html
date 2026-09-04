@@ -3,8 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b6b63" />
+    <meta name="theme-color" content="#2563EB" />
     <title>HidroCondo</title>
+    <script>
+      (() => {
+        const params = new URLSearchParams(location.search);
+        const explicit = params.get('v2');
+        if (explicit === '1') localStorage.setItem('hidrocondo.frontend', 'v2');
+        if (explicit === '0') localStorage.setItem('hidrocondo.frontend', 'v1');
+        if (explicit === '1' || (!explicit && localStorage.getItem('hidrocondo.frontend') === 'v2')) {
+          document.documentElement.classList.add('tecmen-v2');
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="/tecmen-v2.css" />
   </head>
   <body>
     <div id="root"></div>
