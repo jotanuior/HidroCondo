@@ -9,7 +9,6 @@ services:
     volumes:
       - hidrocondo_pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
-      - ./db/migrations/002_access_reports.sql:/docker-entrypoint-initdb.d/002_access_reports.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hidrocondo} -d ${POSTGRES_DB:-hidrocondo}"]
       interval: 5s
