@@ -13,5 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm run build
+      - name: Install dependencies
+        run: npm install
+      - name: Build API
+        run: npm run build -w apps/api
+      - name: Build Web
+        run: npm run build -w apps/web
