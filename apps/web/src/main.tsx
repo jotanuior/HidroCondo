@@ -12,7 +12,9 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+const API_URL = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  : '';
 
 type Summary = {
   condominiums: number;
