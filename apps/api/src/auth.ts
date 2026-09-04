@@ -7,7 +7,7 @@ export type AuthUser = {
   email: string;
 };
 
-export type AuthenticatedRequest = Request & { auth?: AuthUser };
+export type AuthenticatedRequest = Request<Record<string, string>> & { auth?: AuthUser };
 
 export function signToken(user: AuthUser): string {
   return jwt.sign(user, process.env.JWT_SECRET ?? 'dev-secret', { expiresIn: '12h' });
