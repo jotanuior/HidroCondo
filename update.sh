@@ -21,16 +21,34 @@ set -a
 source .env
 set +a
 API_PUBLIC_PORT="${API_HOST_PORT:-3000}"
+NGINX_MODE="${NGINX_MODE:-external}"
+
+compose_up(){
+  if [[ "$NGINX_MODE" == "internal" ]]; then
+    docker compose --profile internal-nginx up -d --build
+  else
+    docker compose up -d --build
+  fi
+}
+
+compose_ps(){
+  if [[ "$NGINX_MODE" == "internal" ]]; then
+    docker compose --profile internal-nginx ps
+  else
+    docker compose ps
+  fi
+}
 
 log "Consultando GitHub"
 git fetch origin "$BRANCH"
 INSTALLED="$(git rev-parse HEAD)"
 AVAILABLE="$(git rev-parse "origin/$BRANCH")"
 printf 'Instalado : %s\nDisponível: %s\n' "$INSTALLED" "$AVAILABLE"
+printf 'Nginx     : %s\n' "$NGINX_MODE"
 
 if [[ "${1:-}" == "--check" ]]; then
   if [[ "$INSTALLED" == "$AVAILABLE" ]]; then ok "Sistema está na versão mais recente"; else warn "Há atualização disponível"; fi
-  docker compose ps
+  compose_ps
   exit 0
 fi
 
@@ -40,7 +58,7 @@ fi
 
 if [[ "$INSTALLED" == "$AVAILABLE" ]]; then
   ok "Código já está atualizado"
-  docker compose ps
+  compose_ps
   exit 0
 fi
 
@@ -56,10 +74,10 @@ fi
 chmod +x install.sh update.sh backup.sh 2>/dev/null || true
 
 log "Reconstruindo containers"
-if ! docker compose up -d --build; then
+if ! compose_up; then
   warn "Falha no build/start. Restaurando código anterior $PREVIOUS"
   git reset --hard "$PREVIOUS"
-  docker compose up -d --build || true
+  compose_up || true
   die "Atualização revertida no código. O backup do banco foi preservado."
 fi
 
@@ -74,10 +92,10 @@ if [[ "$HEALTH_OK" -ne 1 ]]; then
   warn "Nova versão não respondeu. Restaurando código anterior $PREVIOUS"
   docker compose logs --tail=120 api || true
   git reset --hard "$PREVIOUS"
-  docker compose up -d --build || true
+  compose_up || true
   die "Atualização revertida. Consulte os logs e o backup criado antes da atualização."
 fi
 
 NEW="$(git rev-parse HEAD)"
 ok "Atualização concluída: $PREVIOUS -> $NEW"
-docker compose ps
+compose_ps
