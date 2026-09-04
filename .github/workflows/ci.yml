@@ -16,6 +16,21 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Build API
-        run: npm run build -w apps/api
+        id: api_build
+        run: |
+          set -o pipefail
+          npm run build -w apps/api 2>&1 | tee api-build.log
       - name: Build Web
-        run: npm run build -w apps/web
+        if: success()
+        run: |
+          set -o pipefail
+          npm run build -w apps/web 2>&1 | tee web-build.log
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            api-build.log
+            web-build.log
+          if-no-files-found: ignore
