@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 export type AuthUser = {
   sub: string;
-  role: 'superadmin' | 'admin' | 'sindico' | 'conselheiro' | 'morador';
+  role: 'superadmin' | 'admin' | 'sindico' | 'zelador' | 'conselheiro' | 'morador';
   email: string;
 };
 
