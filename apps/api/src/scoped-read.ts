@@ -40,7 +40,13 @@ export function registerScopedReadRoutes(app: Express) {
 
   app.get('/api/v1/dashboard/series', requireAuth, async (req: AuthenticatedRequest, res) => {
     const days = Math.min(90, Math.max(1, Number(req.query.days ?? 14) || 14));
-    const q = await pool.query(`WITH allowed_units AS(${allowedUnitsSql}),ss AS(${sensorScopeSql}),dates AS(SELECT generate_series(current_date-($3::int-1),current_date,interval '1 day')::date day)
+    const q = await pool.query(`WITH allowed_units AS(${allowedUnitsSql}),ss AS(${sensorScopeSql}),dates AS(
+      SELECT generate_series(
+        current_date - ($3::int - 1),
+        current_date,
+        interval '1 day'
+      )::date AS day
+    )
       SELECT d.day,COALESCE(SUM(t.consumption_m3),0)::float8 consumption_m3
         FROM dates d LEFT JOIN telemetry_readings t
           ON t.received_at>=d.day::timestamp AND t.received_at<(d.day+1)::timestamp
