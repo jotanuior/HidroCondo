@@ -47,7 +47,7 @@ export function registerScopedReadRoutes(app: Express) {
         interval '1 day'
       )::date AS day
     )
-      SELECT d.day,COALESCE(SUM(t.consumption_m3),0)::float8 consumption_m3
+      SELECT to_char(d.day,'YYYY-MM-DD') AS day,COALESCE(SUM(t.consumption_m3),0)::float8 consumption_m3
         FROM dates d LEFT JOIN telemetry_readings t
           ON t.received_at>=d.day::timestamp AND t.received_at<(d.day+1)::timestamp
          AND t.sensor_id IN(SELECT sensor_id FROM ss)
