@@ -76,7 +76,7 @@ export function registerAccessRoutes(app: Express) {
 
     const proto = req.header('x-forwarded-proto')?.split(',')[0]?.trim() || req.protocol;
     const host = req.header('x-forwarded-host')?.split(',')[0]?.trim() || req.get('host');
-    const url = `${proto}://${host}/convite/${token}`;
+    const url = `${proto}://${host}/convite.html?token=${encodeURIComponent(token)}`;
     const target = p.scope_type === 'unit' ? `${condo.name} · unidade` : condo.name;
     const text = `Você recebeu um convite para acessar o HidroCondo (${target}). ${url}`;
     res.status(201).json({ id: inserted.rows[0].id, url, token, expires_at: inserted.rows[0].expires_at, whatsapp_text: text, email_subject: 'Convite de acesso ao HidroCondo', email_body: text });
