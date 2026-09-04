@@ -123,9 +123,11 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
       }
     }
 
-    const currentMoment = sourceTimestamp ?? receivedAt;
+    // Comunicação é medida pelo horário em que o servidor recebeu o pacote.
+    // O timestamp enviado pelo coletor é preservado apenas como source_timestamp,
+    // evitando que relógio/fuso incorreto do Node-RED faça um sensor parecer online.
     const offlineSeconds = previousAt
-      ? Math.max(0, Math.floor((currentMoment.getTime() - previousAt.getTime()) / 1000))
+      ? Math.max(0, Math.floor((receivedAt.getTime() - previousAt.getTime()) / 1000))
       : 0;
 
     if (previousAt && offlineSeconds > 1800) {
@@ -165,7 +167,7 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
               virtual_counter = $4,
               central_serial = COALESCE(NULLIF($5, ''), central_serial)
         WHERE id = $1`,
-      [sensor.id, rawValue, currentMoment, virtualCounter, centralSerial]
+      [sensor.id, rawValue, receivedAt, virtualCounter, centralSerial]
     );
 
     await client.query('COMMIT');
