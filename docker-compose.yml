@@ -23,13 +23,14 @@ services:
       API_PORT: 3000
       JWT_SECRET: ${JWT_SECRET:-dev-secret}
       TELEMETRY_API_KEY: ${TELEMETRY_API_KEY:-dev-telemetry-key}
+      SCAE_SYNC_API_KEY: ${SCAE_SYNC_API_KEY:-dev-scae-sync-key}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://hidrocondo.tecmen.com.br}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      MAIL_FROM: ${MAIL_FROM:-HidroCondo <no-reply@localhost>}
+      MAIL_FROM: "${MAIL_FROM:-HidroCondo <no-reply@localhost>}"
     ports:
       - "127.0.0.1:${API_HOST_PORT:-3000}:3000"
     depends_on:
