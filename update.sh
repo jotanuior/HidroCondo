@@ -86,7 +86,7 @@ log "Atualizando código"
 if ! git pull --ff-only origin "$BRANCH"; then
   die "Falha no git pull. Nenhuma alteração de runtime foi aplicada."
 fi
-chmod +x install.sh update.sh backup.sh 2>/dev/null || true
+chmod +x install.sh update.sh backup.sh migrate.sh 2>/dev/null || true
 
 log "Reconstruindo containers"
 set +e
@@ -96,6 +96,18 @@ set -e
 
 if [[ "$COMPOSE_RC" -ne 0 ]]; then
   warn "Docker Compose retornou código $COMPOSE_RC. Verificando se os serviços ficaram operacionais antes de reverter."
+fi
+
+if [[ -x ./migrate.sh ]]; then
+  log "Aplicando migrations do banco"
+  if ! ./migrate.sh; then
+    warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
+    git reset --hard "$PREVIOUS"
+    set +e
+    compose_up
+    set -e
+    die "Atualização revertida por falha de migration. O backup do banco foi preservado."
+  fi
 fi
 
 log "Validando API e frontend"
