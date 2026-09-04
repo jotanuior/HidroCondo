@@ -21,6 +21,7 @@ set -a
 source .env
 set +a
 API_PUBLIC_PORT="${API_HOST_PORT:-3000}"
+WEB_PUBLIC_PORT="${WEB_HOST_PORT:-8080}"
 NGINX_MODE="${NGINX_MODE:-external}"
 
 compose_up(){
@@ -37,6 +38,20 @@ compose_ps(){
   else
     docker compose ps
   fi
+}
+
+services_healthy(){
+  curl -fsS "http://127.0.0.1:${API_PUBLIC_PORT}/health" >/dev/null 2>&1 && \
+  curl -fsSI "http://127.0.0.1:${WEB_PUBLIC_PORT}/" >/dev/null 2>&1
+}
+
+wait_services(){
+  local i
+  for i in $(seq 1 60); do
+    if services_healthy; then return 0; fi
+    sleep 2
+  done
+  return 1
 }
 
 log "Consultando GitHub"
@@ -74,28 +89,31 @@ fi
 chmod +x install.sh update.sh backup.sh 2>/dev/null || true
 
 log "Reconstruindo containers"
-if ! compose_up; then
-  warn "Falha no build/start. Restaurando código anterior $PREVIOUS"
-  git reset --hard "$PREVIOUS"
-  compose_up || true
-  die "Atualização revertida no código. O backup do banco foi preservado."
+set +e
+compose_up
+COMPOSE_RC=$?
+set -e
+
+if [[ "$COMPOSE_RC" -ne 0 ]]; then
+  warn "Docker Compose retornou código $COMPOSE_RC. Verificando se os serviços ficaram operacionais antes de reverter."
 fi
 
-log "Validando healthcheck"
-HEALTH_OK=0
-for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:${API_PUBLIC_PORT}/health" >/dev/null 2>&1; then HEALTH_OK=1; break; fi
-  sleep 2
-done
-
-if [[ "$HEALTH_OK" -ne 1 ]]; then
-  warn "Nova versão não respondeu. Restaurando código anterior $PREVIOUS"
-  docker compose logs --tail=120 api || true
+log "Validando API e frontend"
+if ! wait_services; then
+  warn "Nova versão não ficou operacional. Exibindo diagnóstico antes do rollback."
+  compose_ps || true
+  docker compose logs --tail=160 api web || true
+  warn "Restaurando código anterior $PREVIOUS"
   git reset --hard "$PREVIOUS"
-  compose_up || true
-  die "Atualização revertida. Consulte os logs e o backup criado antes da atualização."
+  set +e
+  compose_up
+  set -e
+  die "Atualização revertida. Consulte o diagnóstico acima; o backup do banco foi preservado."
 fi
 
 NEW="$(git rev-parse HEAD)"
+if [[ "$COMPOSE_RC" -ne 0 ]]; then
+  warn "Compose retornou código não-zero, porém API e frontend responderam corretamente; atualização mantida."
+fi
 ok "Atualização concluída: $PREVIOUS -> $NEW"
 compose_ps
