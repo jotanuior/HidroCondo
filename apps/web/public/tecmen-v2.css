@@ -1,43 +1,46 @@
-html.tecmen-v2{--primary:#2563eb;--secondary:#3b82f6;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--background:#f6f8fc;--surface:#fff;--border:#e5e7eb;--text-primary:#0f172a;--text-secondary:#64748b;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--shadow-sm:0 1px 2px rgba(15,23,42,.03),0 4px 12px rgba(15,23,42,.025);--shadow-md:0 12px 30px rgba(15,23,42,.06);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--background)}
+html.tecmen-v2{--primary:#2563eb;--secondary:#3b82f6;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--background:#f5f7fb;--surface:#fff;--border:#e6eaf0;--text-primary:#0f172a;--text-secondary:#64748b;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--shadow-sm:0 1px 2px rgba(15,23,42,.02),0 6px 18px rgba(15,23,42,.035);--shadow-md:0 18px 46px rgba(15,23,42,.10);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--background)}
 html.tecmen-v2 body{background:var(--background);color:var(--text-primary)}
-html.tecmen-v2 .app-shell{grid-template-columns:82px minmax(0,1fr);min-height:100dvh}
-html.tecmen-v2 .sidebar{width:82px;height:100dvh;padding:16px 11px;background:#fff;color:var(--text-secondary);border-right:1px solid var(--border);box-shadow:none;z-index:30}
-html.tecmen-v2 .brand{justify-content:center;padding:0 0 22px}
+html.tecmen-v2 .app-shell{grid-template-columns:76px minmax(0,1fr);min-height:100dvh}
+html.tecmen-v2 .sidebar{width:76px;height:100dvh;padding:15px 10px;background:#fff;color:var(--text-secondary);border-right:1px solid var(--border);box-shadow:none;z-index:30;overflow:visible}
+html.tecmen-v2 .brand{justify-content:center;padding:0 0 20px}
 html.tecmen-v2 .brand>span{display:none}
-html.tecmen-v2 .brand-mark.small{width:44px;height:44px;border-radius:13px;background:linear-gradient(145deg,#2563eb,#3b82f6);color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.18)}
-html.tecmen-v2 .sidebar nav{gap:8px}
-html.tecmen-v2 .sidebar nav button{position:relative;width:54px;height:48px;margin:0 auto;justify-content:center;padding:0;border-radius:12px;color:#64748b;background:transparent;transition:background .18s ease,color .18s ease,transform .18s ease}
-html.tecmen-v2 .sidebar nav button>span:not(:first-child){display:none}
-html.tecmen-v2 .sidebar nav button:hover{background:#eff6ff;color:var(--primary)}
-html.tecmen-v2 .sidebar nav button.active{background:#eff6ff;color:var(--primary)}
-html.tecmen-v2 .sidebar nav button.active:before{content:"";position:absolute;left:-11px;width:3px;height:28px;border-radius:0 4px 4px 0;background:var(--primary)}
-html.tecmen-v2 .sidebar nav button[title]:hover:after{content:attr(title);position:absolute;left:64px;top:50%;transform:translateY(-50%);white-space:nowrap;background:#0f172a;color:white;font-size:12px;font-weight:600;padding:7px 9px;border-radius:8px;box-shadow:var(--shadow-md);z-index:100}
-html.tecmen-v2 .sidebar-footer{margin-top:auto;padding-top:16px;border-top:1px solid var(--border);justify-content:center;flex-direction:column}
-html.tecmen-v2 .sidebar-footer>div{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#2563eb;color:#fff;font-weight:800;overflow:hidden}
+html.tecmen-v2 .brand-mark.small{width:42px;height:42px;border-radius:12px;background:#2563eb;color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.16)}
+html.tecmen-v2 .sidebar nav{display:grid;gap:7px;overflow:visible}
+html.tecmen-v2 .sidebar nav button{position:relative;width:46px;height:44px;min-width:46px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:0;padding:0!important;border:0;border-radius:11px;color:#64748b;background:transparent!important;box-shadow:none!important;font-size:0!important;line-height:0;white-space:nowrap;overflow:visible;transition:background .18s ease,color .18s ease,transform .18s ease}
+html.tecmen-v2 .sidebar nav button svg{width:20px;height:20px;flex:0 0 20px;stroke-width:1.8}
+html.tecmen-v2 .sidebar nav button.extra-menu-item>span:first-child{display:inline-grid!important;place-items:center;width:20px;height:20px;font-size:17px!important;line-height:1;color:inherit}
+html.tecmen-v2 .sidebar nav button.extra-menu-item>span:last-child{display:none!important}
+html.tecmen-v2 .sidebar nav button:hover{background:#eff6ff!important;color:var(--primary);transform:translateY(-1px)}
+html.tecmen-v2 .sidebar nav button.active{background:#eff6ff!important;color:var(--primary)}
+html.tecmen-v2 .sidebar nav button.active:before{content:"";position:absolute;left:-10px;top:9px;width:3px;height:26px;border-radius:0 4px 4px 0;background:var(--primary)}
+html.tecmen-v2 .sidebar nav button[title]:hover:after{content:attr(title);position:absolute;left:57px;top:50%;transform:translateY(-50%);white-space:nowrap;background:#0f172a;color:#fff;font-size:12px!important;line-height:1.2;font-weight:650;padding:7px 9px;border-radius:8px;box-shadow:var(--shadow-md);z-index:200;pointer-events:none}
+html.tecmen-v2 .sidebar-footer{margin-top:auto;padding-top:15px;border-top:1px solid var(--border);justify-content:center;flex-direction:column;gap:9px}
+html.tecmen-v2 .sidebar-footer>div{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#2563eb;color:#fff;font-weight:800;overflow:hidden}
 html.tecmen-v2 .sidebar-footer>div strong{font-size:0}
-html.tecmen-v2 .sidebar-footer>div strong:before{content:"U";font-size:13px}
+html.tecmen-v2 .sidebar-footer>div strong:before{content:"U";font-size:12px}
 html.tecmen-v2 .sidebar-footer>div span{display:none}
 html.tecmen-v2 .sidebar-footer .icon-button{color:#64748b}
-html.tecmen-v2 .content{padding:26px 30px 36px;max-width:1600px;width:100%;margin:0 auto}
+html.tecmen-v2 .content{padding:28px 34px 38px;max-width:1540px;width:100%;margin:0 auto}
 html.tecmen-v2 .page-header{align-items:center;margin-bottom:20px;padding:0}
 html.tecmen-v2 .page-header .eyebrow{display:none}
-html.tecmen-v2 .page-header h1{font-size:30px;line-height:1.1;margin:0 0 6px;color:#0b1538;letter-spacing:-.035em;font-weight:800}
+html.tecmen-v2 .page-header h1{font-size:31px;line-height:1.1;margin:0 0 6px;color:#0b1538;letter-spacing:-.035em;font-weight:800}
 html.tecmen-v2 .page-header .muted{font-size:13px;color:var(--text-secondary);margin:0}
 html.tecmen-v2 button:not(.secondary):not(.icon-button):not(.danger-icon):not(.context-share){background:var(--primary);border-radius:9px;padding:10px 14px;box-shadow:none;font-weight:700;transition:background .18s ease,transform .18s ease}
 html.tecmen-v2 button:not(.secondary):not(.icon-button):not(.danger-icon):not(.context-share):hover{background:#1d4ed8}
 html.tecmen-v2 .secondary{border:1px solid #d8dee8;background:#fff;color:#334155;border-radius:9px;padding:9px 12px;box-shadow:none}
 html.tecmen-v2 .secondary:hover{background:#f8fafc;border-color:#cbd5e1}
 html.tecmen-v2 .metric-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-html.tecmen-v2 .metric-card{min-height:124px;padding:18px;border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);background:#fff;gap:9px}
-html.tecmen-v2 .metric-card>span{font-size:12px;color:#64748b;font-weight:600;padding-right:38px}
-html.tecmen-v2 .metric-card>strong{font-size:30px;color:#0b1538;font-weight:800}
+html.tecmen-v2 .metric-card{min-height:118px;padding:18px;border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow-sm);background:#fff;gap:8px}
+html.tecmen-v2 .metric-card>span{font-size:12px;color:#64748b;font-weight:650;padding-right:38px}
+html.tecmen-v2 .metric-card>strong{font-size:29px;line-height:1.1;color:#0b1538;font-weight:800;letter-spacing:-.025em}
 html.tecmen-v2 .metric-icon{width:34px;height:34px;border-radius:10px;background:#eff6ff;color:var(--primary);right:14px;top:14px}
-html.tecmen-v2 .dashboard-grid{grid-template-columns:minmax(0,1.55fr) minmax(280px,.75fr);gap:14px}
-html.tecmen-v2 .panel,html.tecmen-v2 .entity-card{border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);background:#fff}
+html.tecmen-v2 .dashboard-grid{grid-template-columns:minmax(0,1.65fr) minmax(300px,.78fr);gap:14px}
+html.tecmen-v2 .panel,html.tecmen-v2 .entity-card{border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow-sm);background:#fff}
 html.tecmen-v2 .panel{margin-top:14px}
-html.tecmen-v2 .panel-heading{padding:16px 18px;border-bottom:1px solid #eef1f5}
+html.tecmen-v2 .panel-heading{padding:15px 17px;border-bottom:1px solid #eef1f5}
 html.tecmen-v2 .panel-heading h2{font-size:15px;color:#111b3b;font-weight:750}
-html.tecmen-v2 .chart-box{padding:14px 10px 4px;color:var(--primary)}
+html.tecmen-v2 .chart-box{padding:14px 10px 3px;color:var(--primary)}
+html.tecmen-v2 .chart-box .recharts-cartesian-grid line{stroke:#e8edf4}
 html.tecmen-v2 .cards-grid{gap:14px}
 html.tecmen-v2 .entity-card{padding:16px}
 html.tecmen-v2 .entity-top h3{font-size:15px;color:#111b3b}
@@ -60,11 +63,11 @@ html.tecmen-v2 .login-hero{color:#0b1538}
 html.tecmen-v2 .login-hero .eyebrow{color:var(--primary)}
 html.tecmen-v2 .login-copy{color:#64748b}
 html.tecmen-v2 .login-card{border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-md)}
-html.tecmen-v2 .login-shell>.login-hero .brand-mark{background:linear-gradient(145deg,#2563eb,#3b82f6);color:#fff}
+html.tecmen-v2 .login-shell>.login-hero .brand-mark{background:#2563eb;color:#fff}
 html.tecmen-v2 .context-share{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #dbe3ef;border-radius:9px;background:#fff;color:#2563eb;padding:0;transition:background .18s ease,border-color .18s ease}
 html.tecmen-v2 .context-share:hover{background:#eff6ff;border-color:#bfdbfe}
 html.tecmen-v2 .entity-actions{display:flex;gap:5px;align-items:center}
 html.tecmen-v2 .unit-actions{display:flex;justify-content:flex-end;gap:5px;align-items:center}
-html.tecmen-v2 .v2-badge{position:fixed;right:18px;bottom:18px;z-index:90;background:#0f172a;color:#fff;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:700;box-shadow:var(--shadow-md)}
+html.tecmen-v2 .v2-badge{position:fixed;right:16px;bottom:14px;z-index:90;background:#0f172a;color:#fff;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:700;box-shadow:var(--shadow-md);opacity:.82}
 @media(max-width:1100px){html.tecmen-v2 .content{padding:24px 22px}html.tecmen-v2 .metric-grid{grid-template-columns:repeat(2,1fr)}html.tecmen-v2 .cards-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:760px){html.tecmen-v2 body{padding-bottom:72px}html.tecmen-v2 .app-shell{display:block;min-height:100dvh}html.tecmen-v2 .content{padding:18px 14px 24px}html.tecmen-v2 .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:68px;padding:7px 10px;border-right:0;border-top:1px solid var(--border);display:block;background:rgba(255,255,255,.98);z-index:100}html.tecmen-v2 .brand,html.tecmen-v2 .sidebar-footer{display:none}html.tecmen-v2 .sidebar nav{display:flex;overflow-x:auto;justify-content:space-around;gap:2px;height:100%}html.tecmen-v2 .sidebar nav button{width:auto;min-width:58px;height:54px;margin:0;padding:0 8px;flex-direction:column;gap:2px;border-radius:10px}html.tecmen-v2 .sidebar nav button>span:not(:first-child){display:block!important;font-size:9px;font-weight:650;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis}html.tecmen-v2 .sidebar nav button.active:before{left:50%;top:-7px;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 4px 4px}html.tecmen-v2 .sidebar nav button[title]:hover:after{display:none}html.tecmen-v2 .page-header{align-items:flex-start;gap:12px}html.tecmen-v2 .page-header h1{font-size:25px}html.tecmen-v2 .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}html.tecmen-v2 .metric-card{min-height:110px;padding:14px}html.tecmen-v2 .metric-card>strong{font-size:23px}html.tecmen-v2 .dashboard-grid{grid-template-columns:1fr}html.tecmen-v2 .cards-grid{grid-template-columns:1fr}html.tecmen-v2 .v2-badge{display:none}}
+@media(max-width:760px){html.tecmen-v2 body{padding-bottom:72px}html.tecmen-v2 .app-shell{display:block;min-height:100dvh}html.tecmen-v2 .content{padding:18px 14px 24px}html.tecmen-v2 .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:68px;padding:7px 8px;border-right:0;border-top:1px solid var(--border);display:block;background:#fff;z-index:100}html.tecmen-v2 .brand,html.tecmen-v2 .sidebar-footer{display:none}html.tecmen-v2 .sidebar nav{display:flex;overflow-x:auto;justify-content:space-around;gap:2px;height:100%}html.tecmen-v2 .sidebar nav button{width:auto;min-width:56px;height:54px;margin:0;padding:0 6px!important;flex-direction:column;gap:2px;border-radius:10px;font-size:9px!important;line-height:1.1}html.tecmen-v2 .sidebar nav button svg{width:19px;height:19px}html.tecmen-v2 .sidebar nav button.extra-menu-item>span:first-child{font-size:16px!important}html.tecmen-v2 .sidebar nav button.extra-menu-item>span:last-child{display:block!important;font-size:9px!important;max-width:66px;overflow:hidden;text-overflow:ellipsis}html.tecmen-v2 .sidebar nav button.active:before{left:50%;top:-7px;transform:translateX(-50%);width:26px;height:3px;border-radius:0 0 4px 4px}html.tecmen-v2 .sidebar nav button[title]:hover:after{display:none}html.tecmen-v2 .page-header{align-items:flex-start;gap:12px}html.tecmen-v2 .page-header h1{font-size:25px}html.tecmen-v2 .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}html.tecmen-v2 .metric-card{min-height:106px;padding:14px}html.tecmen-v2 .metric-card>strong{font-size:22px}html.tecmen-v2 .dashboard-grid{grid-template-columns:1fr}html.tecmen-v2 .cards-grid{grid-template-columns:1fr}html.tecmen-v2 .v2-badge{display:none}}
