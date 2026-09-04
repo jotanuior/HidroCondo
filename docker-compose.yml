@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hidrocondo}
+      POSTGRES_USER: ${POSTGRES_USER:-hidrocondo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hidrocondo}
+    volumes:
+      - hidrocondo_pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hidrocondo} -d ${POSTGRES_DB:-hidrocondo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./apps/api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://hidrocondo:hidrocondo@db:5432/hidrocondo}
+      API_PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      TELEMETRY_API_KEY: ${TELEMETRY_API_KEY:-dev-telemetry-key}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  hidrocondo_pgdata:
