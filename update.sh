@@ -54,6 +54,13 @@ wait_services(){
   return 1
 }
 
+run_migrations(){
+  if [[ -x ./migrate.sh ]]; then
+    log "Aplicando migrations do banco"
+    ./migrate.sh
+  fi
+}
+
 log "Consultando GitHub"
 git fetch origin "$BRANCH"
 INSTALLED="$(git rev-parse HEAD)"
@@ -73,6 +80,10 @@ fi
 
 if [[ "$INSTALLED" == "$AVAILABLE" ]]; then
   ok "Código já está atualizado"
+  chmod +x migrate.sh 2>/dev/null || true
+  run_migrations || die "Falha ao aplicar migrations do banco."
+  log "Validando API e frontend"
+  wait_services || die "Serviços não estão operacionais após a migration."
   compose_ps
   exit 0
 fi
@@ -98,16 +109,13 @@ if [[ "$COMPOSE_RC" -ne 0 ]]; then
   warn "Docker Compose retornou código $COMPOSE_RC. Verificando se os serviços ficaram operacionais antes de reverter."
 fi
 
-if [[ -x ./migrate.sh ]]; then
-  log "Aplicando migrations do banco"
-  if ! ./migrate.sh; then
-    warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
-    git reset --hard "$PREVIOUS"
-    set +e
-    compose_up
-    set -e
-    die "Atualização revertida por falha de migration. O backup do banco foi preservado."
-  fi
+if ! run_migrations; then
+  warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
+  git reset --hard "$PREVIOUS"
+  set +e
+  compose_up
+  set -e
+  die "Atualização revertida por falha de migration. O backup do banco foi preservado."
 fi
 
 log "Validando API e frontend"
