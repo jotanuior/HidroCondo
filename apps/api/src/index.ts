@@ -10,6 +10,7 @@ import { registerCounterRoutes } from './counter.js';
 import { registerAccessRoutes } from './access.js';
 import { registerReportRoutes } from './reports.js';
 import { registerScopedReadRoutes } from './scoped-read.js';
+import { registerUserRoutes } from './users.js';
 
 const app = express();
 app.use(cors());
@@ -61,6 +62,7 @@ app.post('/api/v1/telemetria', async (req, res) => {
 });
 
 registerScopedReadRoutes(app);
+registerUserRoutes(app);
 registerManagementRoutes(app);
 registerCounterRoutes(app);
 registerAccessRoutes(app);
