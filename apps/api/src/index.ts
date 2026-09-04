@@ -6,6 +6,7 @@ import { pool } from './db.js';
 import { requireAuth, signToken, type AuthenticatedRequest } from './auth.js';
 import { ingestTelemetry } from './telemetry.js';
 import { registerManagementRoutes } from './management.js';
+import { registerCounterRoutes } from './counter.js';
 
 const app = express();
 app.use(cors());
@@ -57,6 +58,7 @@ app.post('/api/v1/telemetria', async (req, res) => {
 });
 
 registerManagementRoutes(app);
+registerCounterRoutes(app);
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
