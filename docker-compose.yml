@@ -2,6 +2,7 @@ version: "3.9"
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hidrocondo}
       POSTGRES_USER: ${POSTGRES_USER:-hidrocondo}
@@ -17,13 +18,14 @@ services:
 
   api:
     build: ./apps/api
+    restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://hidrocondo:hidrocondo@db:5432/hidrocondo}
       API_PORT: 3000
       JWT_SECRET: ${JWT_SECRET:-dev-secret}
       TELEMETRY_API_KEY: ${TELEMETRY_API_KEY:-dev-telemetry-key}
     ports:
-      - "3000:3000"
+      - "${API_HOST_PORT:-3000}:3000"
     depends_on:
       db:
         condition: service_healthy
@@ -33,8 +35,9 @@ services:
       context: ./apps/web
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${WEB_HOST_PORT:-8080}:80"
     depends_on:
       - api
 
