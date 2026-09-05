@@ -5,24 +5,38 @@ import { requireAuth, type AuthenticatedRequest } from './auth.js';
 
 const uuid = z.string().uuid();
 
+// Um grant no nível superior herda tudo abaixo dele.
 const allowedUnitsSql = `
-  SELECT u.id unit_id,u.identifier unit_identifier,b.id building_id,b.name building_name,
-         c.id condominium_id,c.name condominium_name
+  SELECT DISTINCT u.id unit_id,u.identifier unit_identifier,b.id building_id,b.name building_name,
+         c.id condominium_id,c.name condominium_name,c.account_id
     FROM units u
     JOIN buildings b ON b.id=u.building_id
     JOIN condominiums c ON c.id=b.condominium_id
    WHERE $1::boolean
+      OR c.account_id IN(SELECT account_id FROM account_members WHERE user_id=$2)
+      OR c.account_id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='account')
       OR (c.id IN(SELECT condominium_id FROM user_condominiums WHERE user_id=$2)
           AND EXISTS(SELECT 1 FROM users ux WHERE ux.id=$2 AND ux.role<>'morador'))
       OR c.id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='condominium')
-      OR u.id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='unit')`;
+      OR b.id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='building')
+      OR u.id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='unit')
+      OR u.id IN(
+           SELECT s2.unit_id FROM sensors s2
+            WHERE s2.id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='sensor')
+              AND s2.unit_id IS NOT NULL
+         )`;
 
 const sensorScopeSql = `
-  SELECT s.id sensor_id,s.serial,s.sensor_type,s.central_serial,s.conversion_factor,s.active,
+  SELECT DISTINCT s.id sensor_id,s.serial,s.sensor_type,s.central_serial,s.conversion_factor,s.active,
          s.last_raw_value,s.last_reading_at,s.virtual_counter,s.unit_id,
          au.unit_identifier,au.building_id,au.building_name,au.condominium_id,au.condominium_name
     FROM sensors s
-    JOIN allowed_units au ON au.unit_id=s.unit_id`;
+    LEFT JOIN allowed_units au ON au.unit_id=s.unit_id
+   WHERE $1::boolean
+      OR au.unit_id IS NOT NULL
+      OR s.account_id IN(SELECT account_id FROM account_members WHERE user_id=$2)
+      OR s.account_id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='account')
+      OR s.id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='sensor')`;
 
 export function registerScopedReadRoutes(app: Express) {
   app.get('/api/v1/dashboard/summary', requireAuth, async (req: AuthenticatedRequest, res) => {
@@ -41,11 +55,7 @@ export function registerScopedReadRoutes(app: Express) {
   app.get('/api/v1/dashboard/series', requireAuth, async (req: AuthenticatedRequest, res) => {
     const days = Math.min(90, Math.max(1, Number(req.query.days ?? 14) || 14));
     const q = await pool.query(`WITH allowed_units AS(${allowedUnitsSql}),ss AS(${sensorScopeSql}),dates AS(
-      SELECT generate_series(
-        current_date - ($3::int - 1),
-        current_date,
-        interval '1 day'
-      )::date AS day
+      SELECT generate_series(current_date - ($3::int - 1),current_date,interval '1 day')::date AS day
     )
       SELECT to_char(d.day,'YYYY-MM-DD') AS day,COALESCE(SUM(t.consumption_m3),0)::float8 consumption_m3
         FROM dates d LEFT JOIN telemetry_readings t

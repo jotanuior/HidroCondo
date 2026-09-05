@@ -2,9 +2,9 @@ import type { Express } from 'express';
 import { z } from 'zod';
 import { requireAuth, type AuthenticatedRequest } from './auth.js';
 
-const serialSchema = z.string().regex(/^09[0-9]+$/, 'Serial inválido');
+export const serialSchema = z.string().regex(/^09[0-9]+$/, 'Serial inválido');
 
-type ScaeValidationResponse = {
+export type ScaeValidationResponse = {
   ok?: boolean;
   exists?: boolean;
   serial?: string | null;
@@ -14,7 +14,7 @@ type ScaeValidationResponse = {
   error?: string;
 };
 
-async function validateSerialInScae(serial: string): Promise<ScaeValidationResponse> {
+export async function validateSerialInScae(serial: string): Promise<ScaeValidationResponse> {
   const url = process.env.SCAE_VALIDATION_URL;
   const user = process.env.SCAE_VALIDATION_USER;
   const password = process.env.SCAE_VALIDATION_PASSWORD;
