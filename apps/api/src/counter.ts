@@ -45,7 +45,7 @@ async function sensorAccess(req: AuthenticatedRequest, sensorId: string) {
 
 export function registerCounterRoutes(app: Express) {
   app.post('/api/v1/sensores/:id/leitura-hidrometro', requireAuth, async (req: AuthenticatedRequest, res) => {
-    if (!canAdjustRole(req.auth?.role) && req.auth?.role !== 'morador' && req.auth?.role !== 'conselheiro' && req.auth?.role !== 'zelador') return forbidden(res);
+    if (!canAdjustRole(req.auth?.role)) return forbidden(res);
     const parsed = adjustmentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Informe uma leitura válida e uma justificativa' });
 
