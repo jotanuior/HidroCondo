@@ -1,5 +1,7 @@
 BEGIN;
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+
 CREATE TABLE IF NOT EXISTS customer_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
@@ -18,6 +20,8 @@ CREATE TABLE IF NOT EXISTS account_members (
 
 ALTER TABLE condominiums ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES customer_accounts(id) ON DELETE RESTRICT;
 ALTER TABLE sensors ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES customer_accounts(id) ON DELETE RESTRICT;
+ALTER TABLE sensors ADD COLUMN IF NOT EXISTS claimed_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE sensors ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_condominiums_account ON condominiums(account_id);
 CREATE INDEX IF NOT EXISTS idx_sensors_account ON sensors(account_id);
