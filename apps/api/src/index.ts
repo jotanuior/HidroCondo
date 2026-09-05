@@ -13,6 +13,8 @@ import { registerScopedReadRoutes } from './scoped-read.js';
 import { registerUserRoutes } from './users.js';
 import { registerScaeRoutes } from './scae.js';
 import { registerScaeValidationRoutes } from './scae-validation.js';
+import { registerOnboardingRoutes } from './onboarding.js';
+import { registerAccountRoutes } from './accounts.js';
 
 const app = express();
 app.use(cors());
@@ -43,7 +45,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
 });
 
 app.get('/api/v1/me', requireAuth, async (req: AuthenticatedRequest, res) => {
-  const result = await pool.query('SELECT id,name,email,role,active,created_at FROM users WHERE id=$1', [req.auth!.sub]);
+  const result = await pool.query('SELECT id,name,email,phone,role,active,created_at FROM users WHERE id=$1', [req.auth!.sub]);
   if (!result.rowCount) return res.status(404).json({ error: 'Usuário não encontrado' });
   res.json(result.rows[0]);
 });
@@ -63,10 +65,12 @@ app.post('/api/v1/telemetria', async (req, res) => {
   }
 });
 
+registerOnboardingRoutes(app);
 registerScaeRoutes(app);
 registerScopedReadRoutes(app);
 registerUserRoutes(app);
 registerScaeValidationRoutes(app);
+registerAccountRoutes(app);
 registerManagementRoutes(app);
 registerCounterRoutes(app);
 registerAccessRoutes(app);
