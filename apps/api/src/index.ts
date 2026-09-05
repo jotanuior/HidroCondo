@@ -12,6 +12,7 @@ import { registerReportRoutes } from './reports.js';
 import { registerScopedReadRoutes } from './scoped-read.js';
 import { registerUserRoutes } from './users.js';
 import { registerScaeRoutes } from './scae.js';
+import { registerScaeValidationRoutes } from './scae-validation.js';
 
 const app = express();
 app.use(cors());
@@ -65,6 +66,7 @@ app.post('/api/v1/telemetria', async (req, res) => {
 registerScaeRoutes(app);
 registerScopedReadRoutes(app);
 registerUserRoutes(app);
+registerScaeValidationRoutes(app);
 registerManagementRoutes(app);
 registerCounterRoutes(app);
 registerAccessRoutes(app);
