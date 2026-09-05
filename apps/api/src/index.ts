@@ -15,6 +15,7 @@ import { registerScaeRoutes } from './scae.js';
 import { registerScaeValidationRoutes } from './scae-validation.js';
 import { registerOnboardingRoutes } from './onboarding.js';
 import { registerAccountRoutes } from './accounts.js';
+import { registerSharingRoutes } from './sharing.js';
 
 const app = express();
 app.use(cors());
@@ -71,6 +72,7 @@ registerScopedReadRoutes(app);
 registerUserRoutes(app);
 registerScaeValidationRoutes(app);
 registerAccountRoutes(app);
+registerSharingRoutes(app);
 registerManagementRoutes(app);
 registerCounterRoutes(app);
 registerAccessRoutes(app);
