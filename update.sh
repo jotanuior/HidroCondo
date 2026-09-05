@@ -26,9 +26,11 @@ NGINX_MODE="${NGINX_MODE:-external}"
 
 compose_up(){
   if [[ "$NGINX_MODE" == "internal" ]]; then
-    docker compose --profile internal-nginx up -d --build
+    docker compose --profile internal-nginx up -d --build --force-recreate api web
+    docker compose --profile internal-nginx up -d
   else
-    docker compose up -d --build
+    docker compose up -d --build --force-recreate api web
+    docker compose up -d db
   fi
 }
 
@@ -78,62 +80,67 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   die "Há alterações locais em arquivos versionados. Revise antes de atualizar."
 fi
 
-if [[ "$INSTALLED" == "$AVAILABLE" ]]; then
-  ok "Código já está atualizado"
-  chmod +x migrate.sh 2>/dev/null || true
-  run_migrations || die "Falha ao aplicar migrations do banco."
-  log "Validando API e frontend"
-  wait_services || die "Serviços não estão operacionais após a migration."
-  compose_ps
-  exit 0
-fi
-
-log "Criando backup obrigatório"
-chmod +x backup.sh 2>/dev/null || true
-./backup.sh
-
 PREVIOUS="$INSTALLED"
-log "Atualizando código"
-if ! git pull --ff-only origin "$BRANCH"; then
-  die "Falha no git pull. Nenhuma alteração de runtime foi aplicada."
+if [[ "$INSTALLED" != "$AVAILABLE" ]]; then
+  log "Criando backup obrigatório"
+  chmod +x backup.sh 2>/dev/null || true
+  ./backup.sh
+
+  log "Atualizando código"
+  if ! git pull --ff-only origin "$BRANCH"; then
+    die "Falha no git pull. Nenhuma alteração de runtime foi aplicada."
+  fi
+else
+  ok "Código já está atualizado"
 fi
+
 chmod +x install.sh update.sh backup.sh migrate.sh 2>/dev/null || true
 
-log "Reconstruindo containers"
+# Sempre reconstrói API e frontend. Isso evita o caso em que o Git já foi
+# atualizado manualmente, mas os containers ainda executam uma imagem antiga.
+log "Reconstruindo API e frontend"
 set +e
 compose_up
 COMPOSE_RC=$?
 set -e
-
 if [[ "$COMPOSE_RC" -ne 0 ]]; then
-  warn "Docker Compose retornou código $COMPOSE_RC. Verificando se os serviços ficaram operacionais antes de reverter."
+  warn "Docker Compose retornou código $COMPOSE_RC. Verificando os serviços."
 fi
 
 if ! run_migrations; then
-  warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
-  git reset --hard "$PREVIOUS"
-  set +e
-  compose_up
-  set -e
-  die "Atualização revertida por falha de migration. O backup do banco foi preservado."
+  if [[ "$PREVIOUS" != "$(git rev-parse HEAD)" ]]; then
+    warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
+    git reset --hard "$PREVIOUS"
+    set +e
+    compose_up
+    set -e
+  fi
+  die "Falha ao aplicar migrations do banco. O backup foi preservado quando aplicável."
 fi
 
 log "Validando API e frontend"
 if ! wait_services; then
-  warn "Nova versão não ficou operacional. Exibindo diagnóstico antes do rollback."
+  warn "A versão atual não ficou operacional. Exibindo diagnóstico."
   compose_ps || true
   docker compose logs --tail=160 api web || true
-  warn "Restaurando código anterior $PREVIOUS"
-  git reset --hard "$PREVIOUS"
-  set +e
-  compose_up
-  set -e
-  die "Atualização revertida. Consulte o diagnóstico acima; o backup do banco foi preservado."
+  if [[ "$PREVIOUS" != "$(git rev-parse HEAD)" ]]; then
+    warn "Restaurando código anterior $PREVIOUS"
+    git reset --hard "$PREVIOUS"
+    set +e
+    compose_up
+    set -e
+    die "Atualização revertida. Consulte o diagnóstico acima."
+  fi
+  die "Serviços não ficaram operacionais após o rebuild."
 fi
 
 NEW="$(git rev-parse HEAD)"
 if [[ "$COMPOSE_RC" -ne 0 ]]; then
-  warn "Compose retornou código não-zero, porém API e frontend responderam corretamente; atualização mantida."
+  warn "Compose retornou código não-zero, porém API e frontend responderam corretamente; versão mantida."
 fi
-ok "Atualização concluída: $PREVIOUS -> $NEW"
+if [[ "$PREVIOUS" == "$NEW" ]]; then
+  ok "Runtime reconstruído e validado na versão $NEW"
+else
+  ok "Atualização concluída: $PREVIOUS -> $NEW"
+fi
 compose_ps
