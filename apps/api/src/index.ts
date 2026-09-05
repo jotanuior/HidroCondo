@@ -16,6 +16,7 @@ import { registerScaeValidationRoutes } from './scae-validation.js';
 import { registerOnboardingRoutes } from './onboarding.js';
 import { registerAccountRoutes } from './accounts.js';
 import { registerSharingRoutes } from './sharing.js';
+import { registerProfileRoutes } from './profile.js';
 
 const app = express();
 app.use(cors());
@@ -67,6 +68,7 @@ app.post('/api/v1/telemetria', async (req, res) => {
 });
 
 registerOnboardingRoutes(app);
+registerProfileRoutes(app);
 registerScaeRoutes(app);
 registerScopedReadRoutes(app);
 registerUserRoutes(app);

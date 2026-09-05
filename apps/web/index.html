@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2563EB" />
+    <meta name="description" content="HidroCondo — Monitoramento inteligente de água para condomínios." />
     <title>HidroCondo</title>
   </head>
   <body>
@@ -13,9 +14,11 @@
       const explicit = params.get('v2');
       if (explicit === '1') localStorage.setItem('hidrocondo.frontend', 'v2');
       if (explicit === '0') localStorage.setItem('hidrocondo.frontend', 'v1');
-      const useV2 = explicit === '1' || (!explicit && localStorage.getItem('hidrocondo.frontend') === 'v2');
-      if (useV2) {
-        await import('/src/v2.tsx');
+      const saved = localStorage.getItem('hidrocondo.frontend');
+      const useLegacy = explicit === '0' || (!explicit && saved === 'v1');
+      if (!useLegacy) {
+        localStorage.setItem('hidrocondo.frontend', 'v2');
+        await import('/src/v2-complete.tsx');
       } else {
         await import('/src/main.tsx');
         const script = document.createElement('script');
