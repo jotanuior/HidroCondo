@@ -40,8 +40,16 @@ function resolveSensorType(payload: TelemetryInput): string {
   return (payload['tipo_sensor recebido'] ?? payload.tipo_sensor ?? payload.numero_serie_sensor.slice(0, 2)).trim();
 }
 
-function parseRawValue(value: string | number): number {
+function parseRawValue(value: string | number, sensorType: string): number {
   const raw = typeof value === 'number' ? value : Number.parseInt(value, 10);
+
+  if (sensorType === '09') {
+    if (!Number.isInteger(raw) || raw < 0 || raw > 999999) {
+      throw new Error('Leitura do sensor 09 fora do intervalo permitido de 000000 a 999999');
+    }
+    return raw;
+  }
+
   if (!Number.isInteger(raw) || raw < 1 || raw > 999) {
     throw new Error('Leitura fora do intervalo permitido de 001 a 999');
   }
@@ -50,7 +58,7 @@ function parseRawValue(value: string | number): number {
 
 export function calculateType09Delta(previous: number, current: number): { delta: number; rollover: boolean } {
   if (current >= previous) return { delta: current - previous, rollover: false };
-  return { delta: (999 - previous) + current, rollover: true };
+  return { delta: (999999 - previous) + current + 1, rollover: true };
 }
 
 async function ensureSensor(client: PoolClient, serial: string, sensorType: string, centralSerial: string) {
@@ -78,7 +86,7 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
   const payload = legacyTelemetrySchema.parse(rawPayload);
   const serial = payload.numero_serie_sensor.trim();
   const sensorType = resolveSensorType(payload);
-  const rawValue = parseRawValue(payload.nivel);
+  const rawValue = parseRawValue(payload.nivel, sensorType);
   const sourceTimestamp = resolveSourceTimestamp(payload);
   const centralSerial = payload.numero_serie_central?.trim() ?? '';
   const receivedAt = new Date();
@@ -123,9 +131,6 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
       }
     }
 
-    // Comunicação é medida pelo horário em que o servidor recebeu o pacote.
-    // O timestamp enviado pelo coletor é preservado apenas como source_timestamp,
-    // evitando que relógio/fuso incorreto do Node-RED faça um sensor parecer online.
     const offlineSeconds = previousAt
       ? Math.max(0, Math.floor((receivedAt.getTime() - previousAt.getTime()) / 1000))
       : 0;
@@ -144,20 +149,7 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
        RETURNING id, sensor_id, raw_value, delta_raw, consumption_m3, virtual_counter, status,
                  offline_seconds, received_at, source_timestamp`,
-      [
-        sensor.id,
-        rawValue,
-        delta,
-        factor,
-        consumptionM3,
-        virtualCounter,
-        receivedAt,
-        sourceTimestamp,
-        status,
-        offlineSeconds,
-        eventKey,
-        JSON.stringify(rawPayload)
-      ]
+      [sensor.id,rawValue,delta,factor,consumptionM3,virtualCounter,receivedAt,sourceTimestamp,status,offlineSeconds,eventKey,JSON.stringify(rawPayload)]
     );
 
     await client.query(
@@ -172,14 +164,7 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
 
     await client.query('COMMIT');
 
-    return {
-      duplicate: false,
-      serial,
-      sensor_type: sensorType,
-      previous_raw_value: previous,
-      rollover,
-      ...inserted.rows[0]
-    };
+    return { duplicate: false, serial, sensor_type: sensorType, previous_raw_value: previous, rollover, ...inserted.rows[0] };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
