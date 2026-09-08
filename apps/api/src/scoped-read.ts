@@ -117,23 +117,10 @@ export function registerScopedReadRoutes(app: Express) {
              au.condominium_id,au.condominium_name,
              (SELECT MIN(s.serial) FROM ss s WHERE s.unit_id=au.unit_id) sensor_serial,
              (SELECT COUNT(*) FROM ss s WHERE s.unit_id=au.unit_id)::int sensor_count,
-             COALESCE((
-               SELECT SUM(t.consumption_m3)
-                 FROM telemetry_readings t
-                 JOIN sensors sx ON sx.id=t.sensor_id
-                WHERE sx.id IN(SELECT sensor_id FROM ss)
-                  AND t.received_at>=date_trunc('month',now())
-                  AND (
-                    EXISTS(SELECT 1 FROM sensor_installations si
-                            WHERE si.sensor_id=sx.id AND si.unit_id=au.unit_id
-                              AND t.received_at>=si.installed_at
-                              AND (si.removed_at IS NULL OR t.received_at<si.removed_at))
-                    OR (
-                      NOT EXISTS(SELECT 1 FROM sensor_installations si0 WHERE si0.sensor_id=sx.id)
-                      AND sx.unit_id=au.unit_id
-                    )
-                  )
-             ),0)::float8 month_consumption_m3
+             COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t JOIN sensors sx ON sx.id=t.sensor_id
+                WHERE sx.id IN(SELECT sensor_id FROM ss) AND t.received_at>=date_trunc('month',now())
+                  AND (EXISTS(SELECT 1 FROM sensor_installations si WHERE si.sensor_id=sx.id AND si.unit_id=au.unit_id AND t.received_at>=si.installed_at AND (si.removed_at IS NULL OR t.received_at<si.removed_at))
+                    OR (NOT EXISTS(SELECT 1 FROM sensor_installations si0 WHERE si0.sensor_id=sx.id) AND sx.unit_id=au.unit_id))),0)::float8 month_consumption_m3
         FROM au ORDER BY au.condominium_name,au.building_name,au.unit_identifier`,
       [req.auth!.role==='superadmin',req.auth!.sub]);
     res.json(q.rows);
@@ -141,11 +128,10 @@ export function registerScopedReadRoutes(app: Express) {
 
   app.get('/api/v1/sensores', requireAuth, async (req: AuthenticatedRequest, res) => {
     const q = await pool.query(`WITH ss AS(${accessibleSensorsSql})
-      SELECT sensor_id id,serial,sensor_type,central_serial,conversion_factor::float8,active,last_raw_value,last_reading_at,virtual_counter::float8,
-             unit_id,unit_identifier,building_id,building_name,condominium_id,condominium_name,account_id,claimed_at,
-             CASE WHEN last_reading_at>=now()-interval '10 minutes' THEN 'online'
-                  WHEN last_reading_at>=now()-interval '30 minutes' THEN 'attention'
-                  ELSE 'offline' END connection_status
+      SELECT sensor_id id,serial,sensor_type,central_serial,conversion_factor::float8,active,
+             CASE WHEN sensor_type='09' AND last_raw_value IS NOT NULL THEN lpad(last_raw_value::text,6,'0') ELSE last_raw_value::text END last_raw_value,
+             last_reading_at,virtual_counter::float8,unit_id,unit_identifier,building_id,building_name,condominium_id,condominium_name,account_id,claimed_at,
+             CASE WHEN last_reading_at>=now()-interval '10 minutes' THEN 'online' WHEN last_reading_at>=now()-interval '30 minutes' THEN 'attention' ELSE 'offline' END connection_status
         FROM ss ORDER BY last_reading_at DESC NULLS LAST,serial`,
       [req.auth!.role==='superadmin',req.auth!.sub]);
     res.json(q.rows);
@@ -154,14 +140,14 @@ export function registerScopedReadRoutes(app: Express) {
   app.get('/api/v1/telemetria/historico', requireAuth, async (req: AuthenticatedRequest, res) => {
     const sensor = typeof req.query.sensor_id==='string' ? req.query.sensor_id : '';
     if (!uuid.safeParse(sensor).success) return res.status(400).json({ error: 'sensor_id inválido' });
-    const allowed = await pool.query(`WITH ss AS(${accessibleSensorsSql}) SELECT 1 FROM ss WHERE sensor_id=$3`,
-      [req.auth!.role==='superadmin',req.auth!.sub,sensor]);
+    const allowed = await pool.query(`WITH ss AS(${accessibleSensorsSql}) SELECT 1 FROM ss WHERE sensor_id=$3`, [req.auth!.role==='superadmin',req.auth!.sub,sensor]);
     if (!allowed.rowCount) return res.status(403).json({ error: 'Sem acesso a este sensor' });
     const limit = Math.min(1000,Math.max(1,Number(req.query.limit??200)||200));
     const q = await pool.query(
-      'SELECT id,raw_value,delta_raw,consumption_m3::float8,virtual_counter::float8,received_at,source_timestamp,status,offline_seconds FROM telemetry_readings WHERE sensor_id=$1 ORDER BY received_at DESC LIMIT $2',
-      [sensor,limit]
-    );
+      `SELECT t.id,CASE WHEN s.sensor_type='09' THEN lpad(t.raw_value::text,6,'0') ELSE t.raw_value::text END raw_value,
+              t.delta_raw,t.consumption_m3::float8,t.virtual_counter::float8,t.received_at,t.source_timestamp,t.status,t.offline_seconds
+         FROM telemetry_readings t JOIN sensors s ON s.id=t.sensor_id
+        WHERE t.sensor_id=$1 ORDER BY t.received_at DESC LIMIT $2`, [sensor,limit]);
     res.json(q.rows);
   });
 }
