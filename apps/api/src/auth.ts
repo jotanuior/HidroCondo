@@ -10,7 +10,8 @@ export type AuthUser = {
 export type AuthenticatedRequest = Request<Record<string, string>> & { auth?: AuthUser };
 
 export function signToken(user: AuthUser): string {
-  return jwt.sign(user, process.env.JWT_SECRET ?? 'dev-secret', { expiresIn: '12h' });
+  const expiresIn = process.env.JWT_EXPIRES_IN ?? '7d';
+  return jwt.sign(user, process.env.JWT_SECRET ?? 'dev-secret', { expiresIn });
 }
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
