@@ -23,7 +23,7 @@ const base=`WITH scope AS(${operationalSensors}), ss AS(
     WHEN NOT EXISTS(SELECT 1 FROM sensor_installations si WHERE si.sensor_id=s.sensor_id) THEN s.unit_id ELSE NULL END
   LEFT JOIN buildings b ON b.id=u.building_id LEFT JOIN condominiums c ON c.id=b.condominium_id
   WHERE t.received_at>=(SELECT least(previous_start,day_start-interval '13 days') AT TIME ZONE ${timeZone} FROM bounds)
-    AND t.received_at<=now()
+    AND t.received_at<=now() AND ($1::boolean OR t.received_at>=COALESCE(s.ownership_started_at,'-infinity'))
 ), events AS(SELECT * FROM raw_events o WHERE ${scopePermission('o')}
   AND ($4::uuid IS NULL OR condominium_id=$4))`;
 

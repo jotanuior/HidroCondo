@@ -1,3 +1,4 @@
+import {registerSensorDossier} from './sensor-dossier.js';
 import express from 'express';
 import { registerOccurrenceRoutes } from './occurrences.js';
 import { startAlertWorker } from './alert-worker.js';
@@ -78,6 +79,7 @@ registerOccurrenceRoutes(app);
 registerOperationalDashboard(app);
 registerUserRoutes(app);
 registerScaeValidationRoutes(app);
+registerSensorDossier(app);
 registerAccountRoutes(app);
 registerSharingRoutes(app);
 registerManagementRoutes(app);

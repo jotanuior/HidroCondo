@@ -43,7 +43,7 @@ export function registerOccurrenceRoutes(app: Express) {
     const allowed=await pool.query(`SELECT o.id FROM alert_occurrences o WHERE o.id=$4 AND ${scopePermission('o')}`,
       [req.auth!.role==='superadmin',req.auth!.sub,null,req.params.id]);
     if(!allowed.rowCount)return res.status(403).json({error:'Sem acesso à ocorrência'});
-    const q=await pool.query(`SELECT e.*,u.name actor_name FROM alert_occurrence_events e LEFT JOIN users u ON u.id=e.actor_id
+    const q=await pool.query(`SELECT e.*,COALESCE(e.actor_name,u.name) actor_name FROM alert_occurrence_events e LEFT JOIN users u ON u.id=e.actor_id
       WHERE occurrence_id=$1 ORDER BY e.created_at,e.id`,[req.params.id]);res.json(q.rows);
   });
 

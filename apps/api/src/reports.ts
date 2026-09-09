@@ -27,7 +27,7 @@ function resolveRange(fromRaw: string, toRaw: string) {
 }
 
 const accessibleSensorsSql = `
-  SELECT DISTINCT s.id sensor_id,s.serial,s.unit_id current_unit_id,s.account_id
+  SELECT DISTINCT s.id sensor_id,s.serial,s.unit_id current_unit_id,s.account_id,s.ownership_started_at
     FROM sensors s
     LEFT JOIN units cu ON cu.id=s.unit_id
     LEFT JOIN buildings cb ON cb.id=cu.building_id
@@ -64,7 +64,7 @@ const eventsSql = `
       ELSE NULL END
     LEFT JOIN buildings b ON b.id=u.building_id
     LEFT JOIN condominiums c ON c.id=b.condominium_id
-   WHERE t.received_at >= $7 AND t.received_at < $8
+   WHERE ($1::boolean OR t.received_at>=COALESCE(s.ownership_started_at,'-infinity')) AND t.received_at >= $7 AND t.received_at < $8
      AND (cardinality($3::uuid[])=0 OR c.id=ANY($3::uuid[]))
      AND (cardinality($4::uuid[])=0 OR b.id=ANY($4::uuid[]))
      AND (cardinality($5::uuid[])=0 OR u.id=ANY($5::uuid[]))

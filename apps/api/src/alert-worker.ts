@@ -28,7 +28,7 @@ export async function evaluateAlerts() {
         SELECT COALESCE(SUM(t.consumption_m3),0) volume FROM telemetry_readings t
         WHERE r.type='consumption' AND t.sensor_id=s.sensor_id
           AND t.received_at >= now()-make_interval(mins=>r.window_minutes)
-          AND t.received_at <= now()
+          AND t.received_at <= now() AND t.received_at>=COALESCE(s.ownership_started_at,'-infinity')
           AND (NOT EXISTS(SELECT 1 FROM sensor_installations si WHERE si.sensor_id=s.sensor_id)
             OR EXISTS(SELECT 1 FROM sensor_installations si WHERE si.sensor_id=s.sensor_id AND si.unit_id=s.unit_id
               AND t.received_at>=si.installed_at AND (si.removed_at IS NULL OR t.received_at<si.removed_at)))
