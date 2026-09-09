@@ -52,8 +52,8 @@ export function registerOperationalDashboard(app: Express) {
           AND received_at<b.previous_end AT TIME ZONE ${timeZone})::int previous_readings
         FROM bounds b LEFT JOIN events ON true`,params);
       const series=await client.query(`${base}, days AS(
-        SELECT generate_series(day_start-interval '13 days',day_start,interval '1 day') day FROM bounds)
-        SELECT to_char(d.day,'YYYY-MM-DD') day,COALESCE(SUM(e.consumption_m3),0)::float8 consumption_m3,COUNT(e.id)::int readings
+        SELECT generate_series(day_start-interval '13 days',day_start,interval '1 day') AS day FROM bounds)
+        SELECT to_char(d.day,'YYYY-MM-DD') AS day,COALESCE(SUM(e.consumption_m3),0)::float8 consumption_m3,COUNT(e.id)::int readings
         FROM days d LEFT JOIN events e ON e.received_at>=d.day AT TIME ZONE ${timeZone}
           AND e.received_at<(d.day+interval '1 day') AT TIME ZONE ${timeZone}
         GROUP BY d.day ORDER BY d.day`,params);

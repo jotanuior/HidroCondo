@@ -5,6 +5,9 @@ import { requireAuth, type AuthenticatedRequest } from './auth.js';
 import { scopePermission } from './operation-scope.js';
 import { canManageCondominium } from './sensor-management.js';
 
+async function auditRule(req:AuthenticatedRequest,action:string,id:string,payload:unknown){
+  await pool.query('INSERT INTO audit_log(user_id,action,entity_type,entity_id,payload) VALUES($1,$2,\'alert_rule\',$3,$4)',[req.auth!.sub,action,id,JSON.stringify(payload)]);
+}
 const operatorRoles=['admin','sindico','zelador'];
 const ruleSchema=z.discriminatedUnion('type',[
   z.object({condominium_id:z.string().uuid(),type:z.literal('offline'),enabled:z.boolean().default(true),
@@ -77,7 +80,7 @@ export function registerOccurrenceRoutes(app: Express) {
     const p=ruleSchema.safeParse(req.body);if(!p.success)return res.status(400).json({error:'Informe limite positivo e período entre 1 e 10080 minutos'});
     if(!await canManageCondominium(req,p.data.condominium_id))return res.status(403).json({error:'Sem permissão para configurar alertas neste condomínio'});
     const v=p.data,q=await pool.query(`INSERT INTO alert_rules(condominium_id,type,enabled,config) VALUES($1,$2,$3,$4) RETURNING *`,[v.condominium_id,v.type,v.enabled,JSON.stringify(v.config)]);
-    res.status(201).json(q.rows[0]);
+    await auditRule(req,'create',q.rows[0].id,v);res.status(201).json(q.rows[0]);
   });
   app.patch('/api/v1/alertas/:id',requireAuth,async(req:AuthenticatedRequest,res)=>{
     const p=z.object({enabled:z.boolean()}).safeParse(req.body);
@@ -85,13 +88,13 @@ export function registerOccurrenceRoutes(app: Express) {
     const q=await pool.query('SELECT condominium_id FROM alert_rules WHERE id=$1',[req.params.id]);
     if(!q.rowCount)return res.status(404).json({error:'Regra não encontrada'});
     if(!await canManageCondominium(req,q.rows[0].condominium_id))return res.status(403).json({error:'Sem permissão para esta regra'});
-    const r=await pool.query('UPDATE alert_rules SET enabled=$2 WHERE id=$1 RETURNING *',[req.params.id,p.data.enabled]);res.json(r.rows[0]);
+    const r=await pool.query('UPDATE alert_rules SET enabled=$2 WHERE id=$1 RETURNING *',[req.params.id,p.data.enabled]);await auditRule(req,'update',String(req.params.id),p.data);res.json(r.rows[0]);
   });
   app.delete('/api/v1/alertas/:id',requireAuth,async(req:AuthenticatedRequest,res)=>{
     if(!z.string().uuid().safeParse(req.params.id).success)return res.status(400).json({error:'Regra inválida'});
     const q=await pool.query('SELECT condominium_id FROM alert_rules WHERE id=$1',[req.params.id]);
     if(!q.rowCount)return res.status(404).json({error:'Regra não encontrada'});
     if(!await canManageCondominium(req,q.rows[0].condominium_id))return res.status(403).json({error:'Sem permissão para esta regra'});
-    await pool.query('DELETE FROM alert_rules WHERE id=$1',[req.params.id]);res.status(204).end();
+    await pool.query('DELETE FROM alert_rules WHERE id=$1',[req.params.id]);await auditRule(req,'delete',String(req.params.id),q.rows[0]);res.status(204).end();
   });
 }

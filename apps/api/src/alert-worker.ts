@@ -4,7 +4,7 @@ import { operationalSensors } from './operation-scope.js';
 // Malformed legacy rules are ignored, rather than crashing the evaluator.
 const validRules = `SELECT a.*,
   CASE WHEN config->>'minutes' ~ '^[0-9]{1,5}$' THEN (config->>'minutes')::int END offline_minutes,
-  CASE WHEN config->>'threshold_m3' ~ '^[0-9]{1,9}(\\.[0-9]{1,9})?$' THEN (config->>'threshold_m3')::numeric END threshold_m3,
+  CASE WHEN jsonb_typeof(config->'threshold_m3')='number' OR config->>'threshold_m3' ~ '^[0-9]{1,9}(\\.[0-9]{1,9})?$' THEN (config->>'threshold_m3')::numeric END threshold_m3,
   CASE WHEN NOT(config ? 'window_minutes') THEN 1440
     WHEN config->>'window_minutes' ~ '^[0-9]{1,5}$' THEN (config->>'window_minutes')::int END window_minutes
   FROM alert_rules a WHERE enabled`;

@@ -41,6 +41,10 @@ jobs:
         run: |
           set -o pipefail
           npm run build -w apps/web 2>&1 | tee web-build.log
+      - name: Test operational screens
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:ui -w apps/web
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -49,4 +53,5 @@ jobs:
           path: |
             api-build.log
             web-build.log
+            apps/web/test-results/
           if-no-files-found: ignore
