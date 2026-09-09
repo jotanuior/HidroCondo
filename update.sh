@@ -96,6 +96,17 @@ fi
 
 chmod +x install.sh update.sh backup.sh migrate.sh 2>/dev/null || true
 
+if ! run_migrations; then
+  if [[ "$PREVIOUS" != "$(git rev-parse HEAD)" ]]; then
+    warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
+    git reset --hard "$PREVIOUS"
+    set +e
+    compose_up
+    set -e
+  fi
+  die "Falha ao aplicar migrations do banco. O backup foi preservado quando aplicável."
+fi
+
 # Sempre reconstrói API e frontend. Isso evita o caso em que o Git já foi
 # atualizado manualmente, mas os containers ainda executam uma imagem antiga.
 log "Reconstruindo API e frontend"
@@ -107,16 +118,6 @@ if [[ "$COMPOSE_RC" -ne 0 ]]; then
   warn "Docker Compose retornou código $COMPOSE_RC. Verificando os serviços."
 fi
 
-if ! run_migrations; then
-  if [[ "$PREVIOUS" != "$(git rev-parse HEAD)" ]]; then
-    warn "Falha ao aplicar migration. Restaurando código anterior $PREVIOUS"
-    git reset --hard "$PREVIOUS"
-    set +e
-    compose_up
-    set -e
-  fi
-  die "Falha ao aplicar migrations do banco. O backup foi preservado quando aplicável."
-fi
 
 log "Validando API e frontend"
 if ! wait_services; then

@@ -47,7 +47,7 @@ const accessibleUnitsSql = `
 
 const accessibleSensorsSql = `
   SELECT DISTINCT s.id sensor_id,s.serial,s.sensor_type,s.central_serial,s.conversion_factor,s.active,
-         s.last_raw_value,s.last_reading_at,s.virtual_counter,s.unit_id,s.account_id,s.claimed_at,
+         s.last_raw_value,s.last_reading_at,s.last_seen_at,s.needs_review,s.counter_digits,s.max_flow_m3_hour,s.virtual_counter,s.unit_id,s.account_id,s.claimed_at,
          u.identifier unit_identifier,b.id building_id,b.name building_name,c.id condominium_id,c.name condominium_name
     FROM sensors s
     LEFT JOIN units u ON u.id=s.unit_id
@@ -67,9 +67,10 @@ export function registerScopedReadRoutes(app: Express) {
     const q = await pool.query(`WITH ac AS(${accessibleCondosSql}),au AS(${accessibleUnitsSql}),ss AS(${accessibleSensorsSql})
       SELECT (SELECT COUNT(*) FROM ac)::int condominiums,
              (SELECT COUNT(*) FROM au)::int units,
-             (SELECT COUNT(*) FROM ss)::int sensors,
-             (SELECT COUNT(*) FROM ss WHERE last_reading_at>=now()-interval '10 minutes')::int sensors_online,
-             (SELECT COUNT(*) FROM ss WHERE last_reading_at<now()-interval '30 minutes' OR last_reading_at IS NULL)::int sensors_offline,
+             (SELECT COUNT(*) FROM ss WHERE active)::int sensors,
+             (SELECT COUNT(*) FROM ss WHERE needs_review AND active)::int sensors_needing_review,
+             (SELECT COUNT(*) FROM ss WHERE active AND last_seen_at>=now()-interval '10 minutes')::int sensors_online,
+             (SELECT COUNT(*) FROM ss WHERE active AND last_seen_at<now()-interval '30 minutes' OR (active AND last_seen_at IS NULL))::int sensors_offline,
              COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t WHERE t.received_at>=date_trunc('month',now()) AND t.sensor_id IN(SELECT sensor_id FROM ss)),0)::float8 month_consumption_m3,
              COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t WHERE t.received_at>=date_trunc('day',now()) AND t.sensor_id IN(SELECT sensor_id FROM ss)),0)::float8 today_consumption_m3`,
       [req.auth!.role==='superadmin', req.auth!.sub]);
@@ -130,8 +131,8 @@ export function registerScopedReadRoutes(app: Express) {
     const q = await pool.query(`WITH ss AS(${accessibleSensorsSql})
       SELECT sensor_id id,serial,sensor_type,central_serial,conversion_factor::float8,active,
              CASE WHEN sensor_type='09' AND last_raw_value IS NOT NULL THEN lpad(last_raw_value::text,6,'0') ELSE last_raw_value::text END last_raw_value,
-             last_reading_at,virtual_counter::float8,unit_id,unit_identifier,building_id,building_name,condominium_id,condominium_name,account_id,claimed_at,
-             CASE WHEN last_reading_at>=now()-interval '10 minutes' THEN 'online' WHEN last_reading_at>=now()-interval '30 minutes' THEN 'attention' ELSE 'offline' END connection_status
+             last_reading_at,last_seen_at,needs_review,counter_digits,max_flow_m3_hour::float8,virtual_counter::float8,unit_id,unit_identifier,building_id,building_name,condominium_id,condominium_name,account_id,claimed_at,
+             CASE WHEN NOT active THEN 'inactive' WHEN last_seen_at>=now()-interval '10 minutes' THEN 'online' WHEN last_seen_at>=now()-interval '30 minutes' THEN 'attention' ELSE 'offline' END connection_status
         FROM ss ORDER BY last_reading_at DESC NULLS LAST,serial`,
       [req.auth!.role==='superadmin',req.auth!.sub]);
     res.json(q.rows);

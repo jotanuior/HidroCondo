@@ -32,7 +32,7 @@ const accessibleSensorsSql = `
     LEFT JOIN units cu ON cu.id=s.unit_id
     LEFT JOIN buildings cb ON cb.id=cu.building_id
     LEFT JOIN condominiums cc ON cc.id=cb.condominium_id
-   WHERE s.active=true AND (
+   WHERE (
          $1::boolean
       OR s.account_id IN(SELECT account_id FROM account_members WHERE user_id=$2)
       OR s.account_id IN(SELECT scope_id FROM access_grants WHERE user_id=$2 AND scope_type='account')

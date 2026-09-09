@@ -5,6 +5,7 @@ import { requireAuth, type AuthenticatedRequest } from './auth.js';
 
 const adjustmentSchema = z.object({
   reading_m3: z.coerce.number().finite().min(0).max(999999999999),
+  raw_baseline: z.number().int().min(0).max(999999).optional(),
   reason: z.string().trim().min(3).max(500)
 });
 
@@ -53,17 +54,26 @@ export function registerCounterRoutes(app: Express) {
     if (!sensor) return res.status(404).json({ error: 'Sensor não encontrado' });
     if (!allowed) return forbidden(res);
 
-    const previous = Number(sensor.virtual_counter ?? 0);
+    let previous = Number(sensor.virtual_counter ?? 0);
     const next = parsed.data.reading_m3;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const locked=await client.query('SELECT virtual_counter,last_raw_value,counter_digits FROM sensors WHERE id=$1 FOR UPDATE',[sensor.id]);
+      if (!locked.rowCount) { await client.query('ROLLBACK');return res.status(404).json({error:'Sensor não encontrado'}); }
+      previous=Number(locked.rows[0].virtual_counter);
+      const baseline=parsed.data.raw_baseline;
+      if (baseline!==undefined && baseline>=10**Number(locked.rows[0].counter_digits)) {
+        await client.query('ROLLBACK');return res.status(400).json({error:'Leitura bruta excede a quantidade de dígitos configurada'});
+      }
       await client.query('UPDATE sensors SET virtual_counter=$2 WHERE id=$1', [sensor.id, next]);
+      if (baseline!==undefined) await client.query(`UPDATE sensors SET last_raw_value=$2,
+        last_reading_at=now(),last_source_timestamp=now(),needs_review=false WHERE id=$1`,[sensor.id,baseline]);
       await client.query(`INSERT INTO audit_log(user_id,action,entity_type,entity_id,payload)
          VALUES($1,'meter_reading_adjustment','sensor',$2,$3::jsonb)`, [req.auth!.sub,sensor.id,JSON.stringify({
         serial:sensor.serial,condominium_id:sensor.condominium_id,condominium_name:sensor.condominium_name,
         building_name:sensor.building_name,unit_identifier:sensor.unit_identifier,
-        previous_reading_m3:previous,new_reading_m3:next,raw_sensor_value:sensor.last_raw_value,reason:parsed.data.reason
+        previous_reading_m3:previous,new_reading_m3:next,raw_sensor_value:locked.rows[0].last_raw_value,new_raw_baseline:baseline,reason:parsed.data.reason
       })]);
       await client.query('COMMIT');
       res.json({ok:true,sensor_id:sensor.id,serial:sensor.serial,previous_reading_m3:previous,reading_m3:next,raw_sensor_value:sensor.last_raw_value});
