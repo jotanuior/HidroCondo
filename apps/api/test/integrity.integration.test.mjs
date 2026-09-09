@@ -145,10 +145,28 @@ test('integração PostgreSQL: medição, permissão e histórico',{skip:!proces
     const filtered=await json('/api/v1/dashboard/operacional?condominium_id='+randomUUID());assert.equal(filtered.summary.sensors,0);
     assert.equal((await request('/api/v1/dashboard/operacional?condominium_id=bad',tokenA)).status,400);
   });
+  await t.test('dias do gráfico seguem meia-noite de Brasília',async()=>{
+    const dates=(await pool.query(`SELECT to_char(date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo')-interval '5 days','YYYY-MM-DD') AS day,
+      to_char(date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo')-interval '6 days','YYYY-MM-DD') previous`)).rows[0];
+    await pool.query(`INSERT INTO telemetry_readings(sensor_id,raw_value,conversion_factor,consumption_m3,event_key,raw_payload,received_at)
+      VALUES($1,0,1,2,$2,'{}',($4::date+time '00:01') AT TIME ZONE 'America/Sao_Paulo'),
+      ($1,0,1,3,$3,'{}',($4::date+time '00:00') AT TIME ZONE 'America/Sao_Paulo'-interval '1 minute')`,[monitored,randomUUID(),randomUUID(),dates.day]);
+    const dash=await json('/api/v1/dashboard/operacional');
+    assert.equal(dash.series.find(x=>x.day===dates.day).consumption_m3,2);
+    assert.equal(dash.series.find(x=>x.day===dates.previous).consumption_m3,3);
+  });
   await t.test('transferência preserva acesso ao histórico original das ocorrências',async()=>{
+    await pool.query(`INSERT INTO sensor_installations(sensor_id,unit_id,installed_at,removed_at) VALUES($1,$2,now()-interval '30 days',now())`,[monitored,unit]);
+    await pool.query('INSERT INTO sensor_installations(sensor_id,unit_id) VALUES($1,$2)',[monitored,unit2]);
     await pool.query('UPDATE sensors SET unit_id=$2 WHERE id=$1',[monitored,unit2]);await evaluateAlerts();
     const list=await (await request('/api/v1/ocorrencias',tokenR)).json();assert.ok(list.items.length>0);assert.ok(list.items.every(x=>x.unit_id===unit&&!x.condition_active));
     const dash=await (await request('/api/v1/dashboard/operacional',tokenR)).json();assert.equal(dash.summary.sensors,0);
+    const nextResident=randomUUID();
+    await pool.query(`INSERT INTO users(id,name,email,password_hash,role) VALUES($1,'Novo morador',$2,'unused','morador')`,[nextResident,`${nextResident}@test.local`]);
+    await pool.query(`INSERT INTO access_grants(user_id,scope_type,scope_id,role) VALUES($1,'unit',$2,'morador')`,[nextResident,unit2]);
+    const nextToken=signToken({sub:nextResident,role:'morador',email:'next@test.local'});
+    const nextDashboard=await (await request('/api/v1/dashboard/operacional',nextToken)).json();
+    assert.equal(nextDashboard.summary.sensors,1);assert.equal(nextDashboard.summary.month_m3,0);
   });
   await t.test('pausar regra encerra condições sem remover histórico',async()=>{
     assert.equal((await request('/api/v1/alertas/'+rule,tokenA,'PATCH',{enabled:false})).status,200);await evaluateAlerts();
