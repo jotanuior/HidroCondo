@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 
 export type AuthUser = {
   sub: string;
@@ -10,7 +10,7 @@ export type AuthUser = {
 export type AuthenticatedRequest = Request<Record<string, string>> & { auth?: AuthUser };
 
 export function signToken(user: AuthUser): string {
-  const expiresIn = process.env.JWT_EXPIRES_IN ?? '7d';
+  const expiresIn = (process.env.JWT_EXPIRES_IN ?? '7d') as SignOptions['expiresIn'];
   return jwt.sign(user, process.env.JWT_SECRET ?? 'dev-secret', { expiresIn });
 }
 
