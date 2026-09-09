@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { pool } from './db.js';
+import { evaluateReading, parseCounter } from './reading-policy.js';
 
 const legacyTelemetrySchema = z.object({
   nivel: z.union([z.string(), z.number()]),
@@ -40,39 +41,17 @@ function resolveSensorType(payload: TelemetryInput): string {
   return (payload['tipo_sensor recebido'] ?? payload.tipo_sensor ?? payload.numero_serie_sensor.slice(0, 2)).trim();
 }
 
-function parseRawValue(value: string | number, sensorType: string): number {
-  const raw = typeof value === 'number' ? value : Number.parseInt(value, 10);
-
-  if (sensorType === '09') {
-    if (!Number.isInteger(raw) || raw < 0 || raw > 999999) {
-      throw new Error('Leitura do sensor 09 fora do intervalo permitido de 000000 a 999999');
-    }
-    return raw;
-  }
-
-  if (!Number.isInteger(raw) || raw < 1 || raw > 999) {
-    throw new Error('Leitura fora do intervalo permitido de 001 a 999');
-  }
-  return raw;
-}
-
-export function calculateType09Delta(previous: number, current: number): { delta: number; rollover: boolean } {
-  if (current >= previous) return { delta: current - previous, rollover: false };
-  return { delta: (999999 - previous) + current + 1, rollover: true };
-}
-
 async function ensureSensor(client: PoolClient, serial: string, sensorType: string, centralSerial: string) {
   await client.query(
     `INSERT INTO sensors (serial, sensor_type, central_serial)
      VALUES ($1, $2, NULLIF($3, ''))
      ON CONFLICT (serial) DO UPDATE SET
-       sensor_type = EXCLUDED.sensor_type,
        central_serial = COALESCE(NULLIF(EXCLUDED.central_serial, ''), sensors.central_serial)`,
     [serial, sensorType, centralSerial]
   );
 
   const result = await client.query(
-    `SELECT id, serial, sensor_type, conversion_factor, last_raw_value, last_reading_at, virtual_counter
+    `SELECT id, serial, sensor_type, conversion_factor, last_raw_value, last_reading_at, last_seen_at, last_source_timestamp, counter_digits, max_flow_m3_hour, needs_review, active, virtual_counter
        FROM sensors
       WHERE serial = $1
       FOR UPDATE`,
@@ -86,58 +65,57 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
   const payload = legacyTelemetrySchema.parse(rawPayload);
   const serial = payload.numero_serie_sensor.trim();
   const sensorType = resolveSensorType(payload);
-  const rawValue = parseRawValue(payload.nivel, sensorType);
+  const rawValue = parseCounter(payload.nivel);
+  if (!serial) throw new Error('Serial vazio');
   const sourceTimestamp = resolveSourceTimestamp(payload);
   const centralSerial = payload.numero_serie_central?.trim() ?? '';
   const receivedAt = new Date();
 
-  const eventKey = eventId?.trim() || crypto.createHash('sha256')
-    .update(`${serial}|${rawValue}|${sourceTimestamp?.toISOString() ?? ''}|${stableJson(rawPayload)}`)
-    .digest('hex');
+  // Legacy messages without event identity are separate heartbeats. Their delta is
+  // still zero when the counter is unchanged. Never deduplicate them forever.
+  const eventKey = crypto.createHash('sha256').update(
+    eventId?.trim() ? `${serial}|event|${eventId.trim()}` : sourceTimestamp
+      ? `${serial}|${rawValue}|${sourceTimestamp.toISOString()}|${stableJson(rawPayload)}`
+      : `${serial}|${crypto.randomUUID()}`
+  ).digest('hex');
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    const sensor = await ensureSensor(client, serial, sensorType, centralSerial);
+    await client.query('UPDATE sensors SET last_seen_at=GREATEST(last_seen_at,$2) WHERE id=$1', [sensor.id,receivedAt]);
     const duplicate = await client.query(
       `SELECT id, sensor_id, raw_value, delta_raw, consumption_m3, virtual_counter, status, received_at
          FROM telemetry_readings
-        WHERE event_key = $1`,
-      [eventKey]
+        WHERE event_key = $1 AND sensor_id=$2`,
+      [eventKey,sensor.id]
     );
 
     if (duplicate.rowCount) {
-      await client.query('ROLLBACK');
+      await client.query('COMMIT');
       return { duplicate: true, ...duplicate.rows[0] };
     }
 
-    const sensor = await ensureSensor(client, serial, sensorType, centralSerial);
     const previous = sensor.last_raw_value === null ? null : Number(sensor.last_raw_value);
     const previousAt = sensor.last_reading_at ? new Date(sensor.last_reading_at) : null;
     const factor = Number(sensor.conversion_factor);
 
-    let delta = 0;
-    let rollover = false;
-    let status = 'first_reading';
-
-    if (previous !== null) {
-      if (sensorType === '09') {
-        const calculated = calculateType09Delta(previous, rawValue);
-        delta = calculated.delta;
-        rollover = calculated.rollover;
-        status = rollover ? 'rollover' : 'normal';
-      } else {
-        status = 'unsupported_type';
-      }
-    }
-
-    const offlineSeconds = previousAt
-      ? Math.max(0, Math.floor((receivedAt.getTime() - previousAt.getTime()) / 1000))
-      : 0;
-
-    if (previousAt && offlineSeconds > 1800) {
-      status = rollover ? 'rollover_recovered_after_offline' : 'recovered_after_offline';
-    }
+    const previousSeen = sensor.last_seen_at ? new Date(sensor.last_seen_at) : previousAt;
+    const offlineSeconds = previousSeen ? Math.max(0, Math.floor((receivedAt.getTime()-previousSeen.getTime())/1000)) : 0;
+    const decision = !sensor.active ? { accepted:false,delta:0,status:'inactive_sensor' }
+      : sensor.sensor_type !== sensorType ? { accepted:false,delta:0,status:'sensor_type_mismatch' }
+      : sensorType !== '09' ? { accepted:false,delta:0,status:'unsupported_type' }
+      : evaluateReading({ previous,current:rawValue,digits:Number(sensor.counter_digits),factor,
+          elapsedSeconds:previousAt ? (receivedAt.getTime()-previousAt.getTime())/1000 : 0,
+          sourceTime:sourceTimestamp?.getTime() ?? null,
+          previousSourceTime:sensor.last_source_timestamp ? new Date(sensor.last_source_timestamp).getTime() : null,
+          receivedTime:receivedAt.getTime(),maxFlowM3Hour:sensor.max_flow_m3_hour === null ? null : Number(sensor.max_flow_m3_hour),
+          pending:sensor.needs_review });
+    const delta = decision.delta;
+    const rollover = decision.status === 'rollover';
+    let status = decision.status;
+    if (decision.accepted && previousAt && offlineSeconds > 1800) status = rollover ? 'rollover_recovered_after_offline' : 'recovered_after_offline';
 
     const consumptionM3 = delta * factor;
     const virtualCounter = Number(sensor.virtual_counter) + consumptionM3;
@@ -152,15 +130,13 @@ export async function ingestTelemetry(rawPayload: unknown, eventId?: string) {
       [sensor.id,rawValue,delta,factor,consumptionM3,virtualCounter,receivedAt,sourceTimestamp,status,offlineSeconds,eventKey,JSON.stringify(rawPayload)]
     );
 
-    await client.query(
-      `UPDATE sensors
-          SET last_raw_value = $2,
-              last_reading_at = $3,
-              virtual_counter = $4,
-              central_serial = COALESCE(NULLIF($5, ''), central_serial)
-        WHERE id = $1`,
-      [sensor.id, rawValue, receivedAt, virtualCounter, centralSerial]
-    );
+    if (decision.accepted) {
+      await client.query(`UPDATE sensors SET last_raw_value=$2,last_reading_at=$3,
+        virtual_counter=$4,last_source_timestamp=COALESCE($5,last_source_timestamp) WHERE id=$1`,
+        [sensor.id,rawValue,receivedAt,virtualCounter,sourceTimestamp]);
+    } else if (!['out_of_order','future_timestamp','inactive_sensor','unsupported_type'].includes(status)) {
+      await client.query('UPDATE sensors SET needs_review=true WHERE id=$1',[sensor.id]);
+    }
 
     await client.query('COMMIT');
 
