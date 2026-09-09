@@ -18,6 +18,8 @@ test('integração PostgreSQL: medição, permissão e histórico',{skip:!proces
   const {registerOccurrenceRoutes}=await import('../dist/occurrences.js');
   const {registerOperationalDashboard}=await import('../dist/operational-dashboard.js');
   const {evaluateAlerts}=await import('../dist/alert-worker.js');
+  const {registerSensorDossier}=await import('../dist/sensor-dossier.js');
+  const {registerAccountRoutes}=await import('../dist/accounts.js');
   const {default:express}=await import('express');
   const root=new URL('../../../',import.meta.url);
   await pool.query(await readFile(new URL('db/init/001_schema.sql',root),'utf8'));
@@ -25,7 +27,7 @@ test('integração PostgreSQL: medição, permissão e histórico',{skip:!proces
     await pool.query(await readFile(new URL(`db/migrations/${f}`,root),'utf8'));
   }
   const app=express();app.use(express.json());
-  registerOccurrenceRoutes(app);registerOperationalDashboard(app);registerScopedReadRoutes(app);registerManagementRoutes(app);registerCounterRoutes(app);registerReportRoutes(app);
+  registerSensorDossier(app);registerAccountRoutes(app);registerOccurrenceRoutes(app);registerOperationalDashboard(app);registerScopedReadRoutes(app);registerManagementRoutes(app);registerCounterRoutes(app);registerReportRoutes(app);
   app.use((err,req,res,next)=>res.status(500).json({error:err.message}));
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   t.after(async()=>{await new Promise(resolve=>server.close(resolve));await pool.end()});
@@ -173,6 +175,72 @@ test('integração PostgreSQL: medição, permissão e histórico',{skip:!proces
     const list=await json('/api/v1/ocorrencias');assert.ok(list.items.filter(x=>x.rule_id===rule).every(x=>!x.condition_active));
   });
 
+  const superId=randomUUID();
+  await pool.query(`INSERT INTO users(id,name,email,password_hash,role) VALUES($1,'Super Admin',$2,'unused','superadmin')`,[superId,`${superId}@test.local`]);
+  const superToken=signToken({sub:superId,role:'superadmin',email:'super@test.local'});
+  await t.test('ficha identifica conta, proprietário, instalação e usuários autorizados',async()=>{
+    const ficha=await json(`/api/v1/sensores/${monitored}/ficha`);
+    assert.equal(ficha.sensor.account_id,aa);assert.equal(ficha.sensor.owner_user_id,a);assert.equal(ficha.sensor.unit_identifier,'102');
+    assert.equal(ficha.permissions.manage,true);assert.equal(ficha.permissions.transfer_account,false);assert.ok(ficha.users.some(x=>x.id===a));
+    assert.equal((await request(`/api/v1/sensores/${monitored}/ficha`,tokenB)).status,403);
+  });
+  await t.test('responsável exige acesso prévio e alteração registra antes e depois',async()=>{
+    assert.equal((await request(`/api/v1/sensores/${monitored}/responsavel`,tokenA,'POST',{user_id:b,reason:'Teste isolado'})).status,400);
+    const r=await request(`/api/v1/sensores/${monitored}/responsavel`,tokenA,'POST',{user_id:a,reason:'Administrador acompanhará equipamento'});assert.equal(r.status,200,await r.text());
+    const ficha=await json(`/api/v1/sensores/${monitored}/ficha`);assert.equal(ficha.sensor.responsible_user_id,a);
+    const log=ficha.audit.find(x=>x.action==='sensor_responsible_changed');assert.equal(log.payload.before.responsible_user_id,null);assert.equal(log.payload.after.responsible_user_id,a);assert.equal(log.actor_name,'Admin');
+    assert.equal((await request(`/api/v1/sensores/${monitored}/responsavel-unidade`,tokenA,'POST',{name:'Morador atualizado',reason:'Cadastro conferido'})).status,200);
+    assert.equal((await json(`/api/v1/sensores/${monitored}/ficha`)).sensor.resident_name,'Morador atualizado');
+  });
+  await t.test('auditoria bloqueia UPDATE, DELETE e TRUNCATE e preserva nome do autor',async()=>{
+    for(const table of ['audit_log','alert_occurrence_events']){
+      await assert.rejects(pool.query(`UPDATE ${table} SET action='alterado'`),{code:'42501'});
+      await assert.rejects(pool.query(`DELETE FROM ${table}`),{code:'42501'});
+      await assert.rejects(pool.query(`TRUNCATE ${table}`),{code:'42501'});
+    }
+    await pool.query(`UPDATE users SET name='Administrador renomeado' WHERE id=$1`,[a]);
+    const log=(await json(`/api/v1/sensores/${monitored}/ficha`)).audit.find(x=>x.action==='sensor_responsible_changed');assert.equal(log.actor_name,'Admin');
+  });
+  await t.test('propriedade da conta exige administrador existente e controle de concorrência',async()=>{
+    await pool.query(`INSERT INTO account_members(account_id,user_id,role) VALUES($1,$2,'admin')`,[aa,superId]);
+    assert.equal((await request(`/api/v1/gestao/contas/${aa}/proprietario`,tokenB,'POST',{user_id:superId,expected_owner_id:a,reason:'Troca de proprietário'})).status,403);
+    assert.equal((await request(`/api/v1/gestao/contas/${aa}/proprietario`,tokenA,'POST',{user_id:superId,expected_owner_id:null,reason:'Troca de proprietário'})).status,409);
+    assert.equal((await request(`/api/v1/gestao/contas/${aa}/proprietario`,tokenA,'POST',{user_id:superId,expected_owner_id:a,reason:'Troca de proprietário'})).status,200);
+    assert.equal((await json(`/api/v1/sensores/${monitored}/ficha`)).sensor.owner_user_id,superId);
+    const owner=(await pool.query('SELECT user_id FROM account_members WHERE account_id=$1 AND is_owner',[aa])).rows;assert.deepEqual(owner.map(x=>x.user_id),[superId]);
+  });
+  await t.test('transferência entre contas encerra instalação e revoga compartilhamentos',async()=>{
+    await pool.query(`INSERT INTO access_grants(user_id,scope_type,scope_id,role) VALUES($1,'sensor',$2,'morador')`,[resident,monitored]);
+    await pool.query(`INSERT INTO access_invitations(token_hash,created_by,scope_type,scope_id,role,expires_at) VALUES($1,$2,'sensor',$3,'morador',now()+interval '1 day')`,[randomUUID(),a,monitored]);
+    const body={account_id:ab,expected_account_id:aa,reason:'Equipamento vendido para outra conta'};
+    assert.equal((await request(`/api/v1/sensores/${monitored}/conta`,tokenA,'POST',body)).status,403);
+    const r=await request(`/api/v1/sensores/${monitored}/conta`,superToken,'POST',body);assert.equal(r.status,200,await r.text());
+    const ficha=await (await request(`/api/v1/sensores/${monitored}/ficha`,tokenB)).json();assert.equal(ficha.sensor.account_id,ab);assert.equal(ficha.sensor.unit_id,null);assert.equal(ficha.sensor.responsible_user_id,null);
+    assert.equal((await request(`/api/v1/sensores/${monitored}/ficha`,tokenA)).status,403);
+    assert.equal((await request(`/api/v1/sensores/${monitored}/ficha`,tokenR)).status,403);
+    assert.equal((await pool.query(`SELECT 1 FROM sensor_installations WHERE sensor_id=$1 AND removed_at IS NULL`,[monitored])).rowCount,0);
+    assert.equal((await pool.query(`SELECT 1 FROM access_invitations WHERE scope_id=$1 AND revoked_at IS NULL`,[monitored])).rowCount,0);
+    assert.equal((await request(`/api/v1/sensores/${monitored}/conta`,superToken,'POST',body)).status,409);
+  });
+  await t.test('nova conta não recebe consumo, leituras nem ajustes da anterior',async()=>{
+    const history=await (await request(`/api/v1/telemetria/historico?sensor_id=${monitored}`,tokenB)).json();assert.deepEqual(history,[]);
+    const d=await (await request('/api/v1/dashboard/operacional',tokenB)).json();assert.equal(d.summary.month_m3,0);
+    const legacy=await (await request('/api/v1/dashboard/summary',tokenB)).json();assert.equal(legacy.month_consumption_m3,0);
+    const report=await (await request('/api/v1/relatorios/consumo',tokenB,'POST',{from:new Date(Date.now()-20*86400000).toISOString(),to:new Date().toISOString()})).json();assert.equal(report.summary.readings,0);
+    assert.ok((await (await request(`/api/v1/telemetria/historico?sensor_id=${monitored}`,superToken)).json()).length>0);
+    await pool.query(`INSERT INTO access_grants(user_id,scope_type,scope_id,role) VALUES($1,'sensor',$2,'morador')`,[b,monitored]);
+    const incidents=await (await request('/api/v1/ocorrencias',tokenB)).json();assert.ok(incidents.items.every(x=>x.account_id===ab));
+  });
+  await t.test('instalação explica contas incompatíveis e regulariza condomínio sem conta',async()=>{
+    const r=await request(`/api/v1/sensores/${monitored}/instalar`,superToken,'POST',{unit_id:unit,reason:'Teste de instalação'});assert.equal(r.status,409);assert.match((await r.json()).error,/contas diferentes/);
+    const empty=randomUUID(),blk=randomUUID(),un=randomUUID();
+    await pool.query(`INSERT INTO condominiums(id,name) VALUES($1,'Condomínio legado')`,[empty]);
+    await pool.query(`INSERT INTO buildings(id,name,condominium_id) VALUES($1,'Bloco',$2)`,[blk,empty]);
+    await pool.query(`INSERT INTO units(id,identifier,building_id) VALUES($1,'201',$2)`,[un,blk]);
+    const missing=await request(`/api/v1/sensores/${monitored}/instalar`,superToken,'POST',{unit_id:un});assert.equal(missing.status,409);assert.match((await missing.json()).error,/sem conta/);
+    assert.equal((await request(`/api/v1/gestao/condominios/${empty}/conta`,superToken,'POST',{account_id:ab,reason:'Regularização de cadastro legado'})).status,200);
+    const installed=await request(`/api/v1/sensores/${monitored}/instalar`,tokenB,'POST',{unit_id:un,reason:'Instalação na conta correta'});assert.equal(installed.status,201,await installed.text());
+  });
   await t.test('desativar usuário invalida token já emitido',async()=>{
     await pool.query('UPDATE users SET active=false WHERE id=$1',[a]);
     assert.equal((await request('/api/v1/sensores',tokenA)).status,401);

@@ -47,7 +47,7 @@ const accessibleUnitsSql = `
 
 const accessibleSensorsSql = `
   SELECT DISTINCT s.id sensor_id,s.serial,s.sensor_type,s.central_serial,s.conversion_factor,s.active,
-         s.last_raw_value,s.last_reading_at,s.last_seen_at,s.needs_review,s.counter_digits,s.max_flow_m3_hour,s.virtual_counter,s.unit_id,s.account_id,s.claimed_at,
+         s.last_raw_value,s.last_reading_at,s.last_seen_at,s.needs_review,s.counter_digits,s.max_flow_m3_hour,s.virtual_counter,s.unit_id,s.account_id,s.claimed_at,s.ownership_started_at,
          u.identifier unit_identifier,b.id building_id,b.name building_name,c.id condominium_id,c.name condominium_name
     FROM sensors s
     LEFT JOIN units u ON u.id=s.unit_id
@@ -71,8 +71,8 @@ export function registerScopedReadRoutes(app: Express) {
              (SELECT COUNT(*) FROM ss WHERE needs_review AND active)::int sensors_needing_review,
              (SELECT COUNT(*) FROM ss WHERE active AND last_seen_at>=now()-interval '10 minutes')::int sensors_online,
              (SELECT COUNT(*) FROM ss WHERE active AND last_seen_at<now()-interval '30 minutes' OR (active AND last_seen_at IS NULL))::int sensors_offline,
-             COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t WHERE t.received_at>=date_trunc('month',now()) AND t.sensor_id IN(SELECT sensor_id FROM ss)),0)::float8 month_consumption_m3,
-             COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t WHERE t.received_at>=date_trunc('day',now()) AND t.sensor_id IN(SELECT sensor_id FROM ss)),0)::float8 today_consumption_m3`,
+             COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t WHERE t.received_at>=date_trunc('month',now()) AND EXISTS(SELECT 1 FROM ss WHERE ss.sensor_id=t.sensor_id AND ($1::boolean OR t.received_at>=COALESCE(ss.ownership_started_at,'-infinity')))),0)::float8 month_consumption_m3,
+             COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t WHERE t.received_at>=date_trunc('day',now()) AND EXISTS(SELECT 1 FROM ss WHERE ss.sensor_id=t.sensor_id AND ($1::boolean OR t.received_at>=COALESCE(ss.ownership_started_at,'-infinity')))),0)::float8 today_consumption_m3`,
       [req.auth!.role==='superadmin', req.auth!.sub]);
     res.json(q.rows[0]);
   });
@@ -85,7 +85,7 @@ export function registerScopedReadRoutes(app: Express) {
       SELECT to_char(d.day,'YYYY-MM-DD') AS day,COALESCE(SUM(t.consumption_m3),0)::float8 consumption_m3
         FROM dates d
         LEFT JOIN telemetry_readings t ON t.received_at>=d.day::timestamp AND t.received_at<(d.day+1)::timestamp
-          AND t.sensor_id IN(SELECT sensor_id FROM ss)
+          AND EXISTS(SELECT 1 FROM ss WHERE ss.sensor_id=t.sensor_id AND ($1::boolean OR t.received_at>=COALESCE(ss.ownership_started_at,'-infinity')))
        GROUP BY d.day ORDER BY d.day`,
       [req.auth!.role==='superadmin', req.auth!.sub, days]);
     res.json(q.rows);
@@ -119,7 +119,7 @@ export function registerScopedReadRoutes(app: Express) {
              (SELECT MIN(s.serial) FROM ss s WHERE s.unit_id=au.unit_id) sensor_serial,
              (SELECT COUNT(*) FROM ss s WHERE s.unit_id=au.unit_id)::int sensor_count,
              COALESCE((SELECT SUM(t.consumption_m3) FROM telemetry_readings t JOIN sensors sx ON sx.id=t.sensor_id
-                WHERE sx.id IN(SELECT sensor_id FROM ss) AND t.received_at>=date_trunc('month',now())
+                WHERE sx.id IN(SELECT sensor_id FROM ss) AND ($1::boolean OR t.received_at>=COALESCE(sx.ownership_started_at,'-infinity')) AND t.received_at>=date_trunc('month',now())
                   AND (EXISTS(SELECT 1 FROM sensor_installations si WHERE si.sensor_id=sx.id AND si.unit_id=au.unit_id AND t.received_at>=si.installed_at AND (si.removed_at IS NULL OR t.received_at<si.removed_at))
                     OR (NOT EXISTS(SELECT 1 FROM sensor_installations si0 WHERE si0.sensor_id=sx.id) AND sx.unit_id=au.unit_id))),0)::float8 month_consumption_m3
         FROM au ORDER BY au.condominium_name,au.building_name,au.unit_identifier`,
@@ -148,7 +148,7 @@ export function registerScopedReadRoutes(app: Express) {
       `SELECT t.id,CASE WHEN s.sensor_type='09' THEN lpad(t.raw_value::text,6,'0') ELSE t.raw_value::text END raw_value,
               t.delta_raw,t.consumption_m3::float8,t.virtual_counter::float8,t.received_at,t.source_timestamp,t.status,t.offline_seconds
          FROM telemetry_readings t JOIN sensors s ON s.id=t.sensor_id
-        WHERE t.sensor_id=$1 ORDER BY t.received_at DESC LIMIT $2`, [sensor,limit]);
+        WHERE t.sensor_id=$1 AND ($3::boolean OR t.received_at>=COALESCE(s.ownership_started_at,'-infinity')) ORDER BY t.received_at DESC LIMIT $2`, [sensor,limit,req.auth!.role==='superadmin']);
     res.json(q.rows);
   });
 }

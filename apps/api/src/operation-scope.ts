@@ -13,11 +13,11 @@ export function scopePermission(alias: string): string {
         OR (g.scope_type='condominium' AND g.scope_id=${alias}.condominium_id)
         OR (g.scope_type='building' AND g.scope_id=${alias}.building_id)
         OR (g.scope_type='unit' AND g.scope_id=${alias}.unit_id)
-        OR (g.scope_type='sensor' AND g.scope_id=${alias}.sensor_id))))`;
+        OR (g.scope_type='sensor' AND g.scope_id=${alias}.sensor_id AND ${alias}.account_id IS NOT DISTINCT FROM (SELECT current_sensor.account_id FROM sensors current_sensor WHERE current_sensor.id=${alias}.sensor_id)))))`;
 }
 
 export const operationalSensors = `SELECT s.id sensor_id,s.serial,s.active,s.account_id,
-  s.last_seen_at,s.last_reading_at,s.needs_review,s.created_at,s.claimed_at,s.virtual_counter,
+  s.last_seen_at,s.last_reading_at,s.needs_review,s.created_at,s.claimed_at,s.virtual_counter,s.ownership_started_at,
   s.unit_id,u.identifier unit_identifier,b.id building_id,b.name building_name,
   c.id condominium_id,c.name condominium_name
   FROM sensors s LEFT JOIN units u ON u.id=s.unit_id

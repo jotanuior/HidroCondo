@@ -61,6 +61,7 @@ export function registerCounterRoutes(app: Express) {
       await client.query('BEGIN');
       const locked=await client.query('SELECT virtual_counter,last_raw_value,counter_digits FROM sensors WHERE id=$1 FOR UPDATE',[sensor.id]);
       if (!locked.rowCount) { await client.query('ROLLBACK');return res.status(404).json({error:'Sensor não encontrado'}); }
+      if(!(await sensorAccess(req,req.params.id)).allowed){await client.query('ROLLBACK');return forbidden(res);}
       previous=Number(locked.rows[0].virtual_counter);
       const baseline=parsed.data.raw_baseline;
       if (baseline!==undefined && baseline>=10**Number(locked.rows[0].counter_digits)) {
@@ -89,8 +90,8 @@ export function registerCounterRoutes(app: Express) {
     if (!allowed) return forbidden(res);
     const result = await pool.query(`SELECT a.id,a.created_at,a.payload,u.name user_name,u.email user_email
        FROM audit_log a LEFT JOIN users u ON u.id=a.user_id
-      WHERE a.entity_type='sensor' AND a.entity_id=$1 AND a.action='meter_reading_adjustment'
-      ORDER BY a.created_at DESC LIMIT 100`, [sensor.id]);
+      WHERE a.entity_type='sensor' AND a.entity_id=$1 AND a.action='meter_reading_adjustment' AND ($2::boolean OR a.created_at>=COALESCE((SELECT ownership_started_at FROM sensors WHERE id=$1),'-infinity'))
+      ORDER BY a.created_at DESC LIMIT 100`, [sensor.id,req.auth!.role==='superadmin']);
     res.json(result.rows);
   });
 }

@@ -49,6 +49,7 @@ export function registerSensorManagementRoutes(app: Express) {
     try {
       await client.query('BEGIN');
       const q=await client.query('SELECT * FROM sensors WHERE id=$1 FOR UPDATE',[req.params.id]);
+      if(!await canManageSensor(req,req.params.id)){await client.query('ROLLBACK');return res.status(403).json({error:'O acesso ao equipamento mudou'});}
       const s=q.rows[0];
       if (!s) { await client.query('ROLLBACK'); return res.status(404).json({error:'Sensor não encontrado'}); }
       const v=p.data;
@@ -77,6 +78,9 @@ export function registerSensorManagementRoutes(app: Express) {
     const client=await pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT id FROM sensors WHERE id=$1 FOR UPDATE',[req.params.id]);
+      if(!await canManageSensor(req,req.params.id)){await client.query('ROLLBACK');return res.status(403).json({error:'O acesso ao equipamento mudou'});}
+
       const r=await client.query('UPDATE sensors SET active=false WHERE id=$1 RETURNING id',[req.params.id]);
       if (!r.rowCount) { await client.query('ROLLBACK');return res.status(404).json({error:'Sensor não encontrado'}); }
       await client.query(`INSERT INTO audit_log(user_id,action,entity_type,entity_id)

@@ -138,18 +138,21 @@ export function registerAccountRoutes(app: Express) {
     const parsed = z.object({ unit_id: uuid, reason: z.string().trim().max(500).optional().nullable() }).safeParse(req.body);
     if (!uuid.safeParse(sensorId).success || !parsed.success) return res.status(400).json({ error: 'Dados inválidos' });
 
-    const scope = await pool.query(`SELECT s.id sensor_id,s.account_id,u.id unit_id,c.id condominium_id,c.account_id unit_account_id
-       FROM sensors s,units u JOIN buildings b ON b.id=u.building_id JOIN condominiums c ON c.id=b.condominium_id
-      WHERE s.id=$1 AND u.id=$2`,[sensorId,parsed.data.unit_id]);
-    const row = scope.rows[0];
-    if (!row) return res.status(404).json({ error: 'Sensor ou unidade não encontrado' });
-    if (!row.account_id || row.account_id !== row.unit_account_id) return res.status(409).json({ error: 'Sensor e unidade pertencem a contas diferentes' });
-    if (!await canOperateCondo(req,row.condominium_id,row.account_id)) return forbidden(res);
-    if (!await canReadSensor(req,sensorId)) return forbidden(res);
-
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const locked=await client.query('SELECT id FROM sensors WHERE id=$1 FOR UPDATE',[sensorId]);
+      if(!locked.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Sensor não encontrado'});}
+      if(!await canReadSensor(req,sensorId)){await client.query('ROLLBACK');return forbidden(res);}
+      const scope=await client.query(`SELECT s.account_id,c.id condominium_id,c.account_id unit_account_id
+        FROM sensors s CROSS JOIN units u JOIN buildings b ON b.id=u.building_id JOIN condominiums c ON c.id=b.condominium_id
+        WHERE s.id=$1 AND u.id=$2`,[sensorId,parsed.data.unit_id]);
+      const row=scope.rows[0];
+      if(!row){await client.query('ROLLBACK');return res.status(404).json({error:'Unidade não encontrada'});}
+      if(!await canOperateCondo(req,row.condominium_id,row.unit_account_id)){await client.query('ROLLBACK');return forbidden(res);}
+      if(!row.account_id||!row.unit_account_id||row.account_id!==row.unit_account_id){
+        await client.query('ROLLBACK');return res.status(409).json({error:!row.account_id?'Sensor sem conta proprietária. Abra a ficha e vincule uma conta.':!row.unit_account_id?'O condomínio da unidade está sem conta. Solicite a vinculação ao Super Admin.':'Sensor e unidade pertencem a contas diferentes. Transfira a conta pela ficha do sensor antes de instalar.'});
+      }
       const active = await client.query('SELECT id,unit_id FROM sensor_installations WHERE sensor_id=$1 AND removed_at IS NULL FOR UPDATE', [sensorId]);
       if (active.rows[0]?.unit_id === parsed.data.unit_id) {
         await client.query('ROLLBACK');
@@ -182,6 +185,9 @@ export function registerAccountRoutes(app: Express) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT id FROM sensors WHERE id=$1 FOR UPDATE',[sensorId]);
+      if(!await canReadSensor(req,sensorId)){await client.query('ROLLBACK');return forbidden(res);}
+
       await client.query(`UPDATE sensor_installations SET removed_at=now(),removed_by=$1,reason=$2 WHERE sensor_id=$3 AND removed_at IS NULL`,[req.auth!.sub,reason,sensorId]);
       await client.query('UPDATE sensors SET unit_id=NULL WHERE id=$1',[sensorId]);
       await client.query(`INSERT INTO audit_log(user_id,action,entity_type,entity_id,payload)
@@ -202,7 +208,7 @@ export function registerAccountRoutes(app: Express) {
        iu.name installed_by_name,ru.name removed_by_name
       FROM sensor_installations si JOIN units u ON u.id=si.unit_id JOIN buildings b ON b.id=u.building_id
       JOIN condominiums c ON c.id=b.condominium_id LEFT JOIN users iu ON iu.id=si.installed_by LEFT JOIN users ru ON ru.id=si.removed_by
-     WHERE si.sensor_id=$1 ORDER BY si.installed_at DESC`,[sensorId]);
+     WHERE si.sensor_id=$1 AND ($2::boolean OR si.installed_at>=COALESCE((SELECT ownership_started_at FROM sensors WHERE id=$1),'-infinity')) ORDER BY si.installed_at DESC`,[sensorId,isSuper(req)]);
     res.json(q.rows);
   });
 }
