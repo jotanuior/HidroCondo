@@ -1,4 +1,7 @@
 import express from 'express';
+import { registerOccurrenceRoutes } from './occurrences.js';
+import { startAlertWorker } from './alert-worker.js';
+import { registerOperationalDashboard } from './operational-dashboard.js';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -71,6 +74,8 @@ registerOnboardingRoutes(app);
 registerProfileRoutes(app);
 registerScaeRoutes(app);
 registerScopedReadRoutes(app);
+registerOccurrenceRoutes(app);
+registerOperationalDashboard(app);
 registerUserRoutes(app);
 registerScaeValidationRoutes(app);
 registerAccountRoutes(app);
@@ -87,4 +92,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 });
 
 const port = Number(process.env.API_PORT ?? 3000);
-app.listen(port, '0.0.0.0', () => console.log(`[hidrocondo] API ouvindo na porta ${port}`));
+const server=app.listen(port, '0.0.0.0', () => console.log(`[hidrocondo] API ouvindo na porta ${port}`));
+
+const stopAlerts=startAlertWorker();
+process.once('SIGTERM',()=>{stopAlerts();server.close(()=>void pool.end());});
