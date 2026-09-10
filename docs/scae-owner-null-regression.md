@@ -1,0 +1,1 @@
+Regressão: owner_user_id nulo não pode propagar NULL para account_members.is_owner.
