@@ -38,6 +38,7 @@ services:
       MAIL_FROM: "${MAIL_FROM:-HidroCondo <no-reply@localhost>}"
       ASAAS_BASE_URL: ${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}
       ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_API_KEY_B64: ${ASAAS_API_KEY_B64:-}
       ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-3000}:3000"
