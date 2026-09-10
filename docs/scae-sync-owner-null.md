@@ -1,0 +1,1 @@
+A sincronização SCAE trata contas sem proprietário definido como `is_owner=false`.
