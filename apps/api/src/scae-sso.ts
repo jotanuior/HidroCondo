@@ -3,10 +3,20 @@ import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { pool } from './db.js';
 import { signToken } from './auth.js';
 
-function scaeJwtSecret(): string {
+function scaeJwtKey(): Buffer {
   const secret = process.env.SCAE_JWT_SECRET;
   if (!secret) throw new Error('SCAE_JWT_SECRET deve ser configurado');
-  return secret;
+
+  // O SCAE legado usa io.jsonwebtoken (JJWT 0.9.x) e chama
+  // signWith(SignatureAlgorithm.HS512, String). Nessa API a String e tratada
+  // como segredo Base64, portanto precisamos reproduzir a mesma decodificacao.
+  const key = Buffer.from(secret.trim(), 'base64');
+  if (!key.length) throw new Error('SCAE_JWT_SECRET inválido');
+  return key;
+}
+
+function normalizeScaeToken(token: string): string {
+  return token.trim().replace(/^Bearer\s+/i, '').replace(/^"+|"+$/g, '').trim();
 }
 
 function extractScaeEmail(payload: JwtPayload): string | null {
@@ -20,7 +30,8 @@ function extractScaeEmail(payload: JwtPayload): string | null {
 }
 
 function verifyScaeToken(token: string): string {
-  const decoded = jwt.verify(token, scaeJwtSecret(), { algorithms: ['HS512'] });
+  const normalized = normalizeScaeToken(token);
+  const decoded = jwt.verify(normalized, scaeJwtKey(), { algorithms: ['HS512'] });
   if (typeof decoded !== 'object' || decoded === null) throw new Error('SCAE_TOKEN_INVALID');
   const email = extractScaeEmail(decoded as JwtPayload);
   if (!email) throw new Error('SCAE_IDENTITY_INVALID');
