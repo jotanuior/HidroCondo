@@ -21,6 +21,7 @@ import { registerOnboardingRoutes } from './onboarding.js';
 import { registerAccountRoutes } from './accounts.js';
 import { registerSharingRoutes } from './sharing.js';
 import { registerProfileRoutes } from './profile.js';
+import { registerBillingRoutes } from './billing.js';
 
 const app = express();
 app.use(cors());
@@ -86,6 +87,7 @@ registerManagementRoutes(app);
 registerCounterRoutes(app);
 registerAccessRoutes(app);
 registerReportRoutes(app);
+registerBillingRoutes(app);
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
