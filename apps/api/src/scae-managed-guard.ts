@@ -1,7 +1,6 @@
-import type { Express, NextFunction, Response } from 'express';
+import type { Express, NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { pool } from './db.js';
-import { requireAuth, type AuthenticatedRequest } from './auth.js';
 
 const uuid=z.string().uuid();
 
@@ -14,11 +13,11 @@ const protectedEntities:ProtectedEntity[]=[
 
 /**
  * Dados cujo source contém SCAE têm o SCAE como fonte de verdade.
- * Impede que PUT/DELETE comuns criem divergência. Dados nativos do
- * HidroCondo continuam editáveis normalmente.
+ * Impede que PUT/DELETE comuns criem divergência. A autenticação e as
+ * permissões continuam sendo validadas pelas rotas de gestão originais.
  */
 export function registerScaeManagedGuard(app:Express){
-  app.use(requireAuth,async(req:AuthenticatedRequest,res:Response,next:NextFunction)=>{
+  app.use(async(req:Request,res:Response,next:NextFunction)=>{
     if(req.method!=='PUT'&&req.method!=='DELETE')return next();
     const entity=protectedEntities.find(x=>req.path.startsWith(x.prefix));
     if(!entity)return next();
