@@ -22,6 +22,7 @@ import { registerAccountRoutes } from './accounts.js';
 import { registerSharingRoutes } from './sharing.js';
 import { registerProfileRoutes } from './profile.js';
 import { registerBillingRoutes } from './billing.js';
+import { registerBillingAsaasSyncRoutes } from './billing-asaas-sync.js';
 import { registerScaeManagedGuard } from './scae-managed-guard.js';
 
 const app = express();
@@ -89,6 +90,7 @@ registerManagementRoutes(app);
 registerCounterRoutes(app);
 registerAccessRoutes(app);
 registerReportRoutes(app);
+registerBillingAsaasSyncRoutes(app);
 registerBillingRoutes(app);
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
