@@ -15,6 +15,7 @@ import { registerReportRoutes } from './reports.js';
 import { registerScopedReadRoutes } from './scoped-read.js';
 import { registerUserRoutes } from './users.js';
 import { registerScaeRoutes } from './scae.js';
+import { registerScaeSsoRoutes } from './scae-sso.js';
 import { registerScaeValidationRoutes } from './scae-validation.js';
 import { registerOnboardingRoutes } from './onboarding.js';
 import { registerAccountRoutes } from './accounts.js';
@@ -73,6 +74,7 @@ app.post('/api/v1/telemetria', async (req, res) => {
 registerOnboardingRoutes(app);
 registerProfileRoutes(app);
 registerScaeRoutes(app);
+registerScaeSsoRoutes(app);
 registerScopedReadRoutes(app);
 registerOccurrenceRoutes(app);
 registerOperationalDashboard(app);
