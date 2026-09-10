@@ -53,7 +53,7 @@
         <div class="fin-head"><div><h1>Integração Asaas</h1><p>A chave API e o token do Webhook ficam somente no servidor; nunca são exibidos nesta tela.</p></div></div>
         <div class="fin-config">
           <div class="fin-card"><h3>Estado da integração</h3><p>API: <span id="cfgApi" class="fin-badge off">Carregando</span></p><p>Ambiente: <strong id="cfgEnv">—</strong></p><p>Webhook: <span id="cfgWebhook" class="fin-badge off">Carregando</span></p></div>
-          <div class="fin-card"><h3>Variáveis do servidor</h3><div class="fin-code">ASAAS_BASE_URL=https://api-sandbox.asaas.com/v3<br>ASAAS_API_KEY=...<br>ASAAS_WEBHOOK_TOKEN=token-seguro-32+-caracteres</div><p class="fin-muted">Na produção, altere a URL base para https://api.asaas.com/v3 e use uma chave criada no ambiente de produção.</p></div>
+          <div class="fin-card"><h3>Variáveis do servidor</h3><div class="fin-code">ASAAS_BASE_URL=https://api-sandbox.asaas.com/v3<br>ASAAS_API_KEY_B64=...<br>ASAAS_WEBHOOK_TOKEN=token-seguro-32+-caracteres</div><p class="fin-muted">Use ASAAS_API_KEY_B64 para evitar interpretação do caractere $ da chave pelo Docker Compose. Na produção, altere a URL base para https://api.asaas.com/v3 e use uma chave de produção.</p></div>
         </div>
       </section>
     </main>
@@ -66,5 +66,6 @@
   <div id="chargeModal" class="fin-modal"><div class="fin-modal-card"><div class="fin-modal-head"><h3>Nova cobrança avulsa</h3><button class="fin-close" data-close="chargeModal">×</button></div><form id="chargeForm" class="fin-form"><label>Cliente<select class="fin-select" id="chargeAccount" required></select></label><label>Descrição<input class="fin-input" id="chargeDescription" required/></label><div class="fin-form-row"><label>Valor (R$)<input class="fin-input" type="number" min="0.01" step="0.01" id="chargeAmount" required/></label><label>Vencimento<input class="fin-input" type="date" id="chargeDue" required/></label></div><label>Forma de pagamento<select class="fin-select" id="chargePayment"><option value="UNDEFINED">Cliente escolhe</option><option value="BOLETO">Boleto</option><option value="PIX">Pix</option><option value="CREDIT_CARD">Cartão</option></select></label><label><input type="checkbox" id="chargeSync" checked /> Criar cobrança no Asaas agora</label><div class="fin-form-actions"><button type="button" class="fin-btn secondary" data-close="chargeModal">Cancelar</button><button class="fin-btn primary">Criar cobrança</button></div></form></div></div>
 
   <script src="/financeiro.js" defer></script>
+  <script src="/financeiro-sync.js" defer></script>
 </body>
 </html>
