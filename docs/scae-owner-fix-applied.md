@@ -1,0 +1,1 @@
+A migration 011 protege account_members.is_owner contra NULL.
