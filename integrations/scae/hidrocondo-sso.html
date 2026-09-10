@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Abrindo HidroCondo</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f7fb;color:#1f2937;font:16px system-ui,sans-serif}
+    main{max-width:440px;padding:32px;text-align:center}.error{color:#b42318}button{border:0;border-radius:10px;padding:12px 18px;font-weight:600;cursor:pointer}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>HidroCondo</h1>
+    <p id="status">Validando sua sessão do SCAE...</p>
+    <div id="fallback" hidden><button id="retry">Tentar novamente</button></div>
+  </main>
+  <script>
+    (() => {
+      const status = document.getElementById('status');
+      const fallback = document.getElementById('fallback');
+      const retry = document.getElementById('retry');
+      const target = 'https://hidrocondo.tecmen.com.br/api/v1/auth/scae/start';
+
+      function submit() {
+        const token = localStorage.getItem('JWT_LENTEC_WEB');
+        if (!token) {
+          status.textContent = 'Sua sessão do SCAE não foi encontrada. Entre novamente no SCAE e tente de novo.';
+          status.className = 'error';
+          fallback.hidden = false;
+          return;
+        }
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = target;
+        form.style.display = 'none';
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'scae_token';
+        input.value = token;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+      }
+
+      retry.addEventListener('click', submit);
+      submit();
+    })();
+  </script>
+</body>
+</html>
