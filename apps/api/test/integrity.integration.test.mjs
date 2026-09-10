@@ -78,7 +78,7 @@ test('integração PostgreSQL: medição, permissão e histórico',{skip:!proces
     assert.equal((await request(`/api/v1/sensores/${sensor}`,tokenA,'DELETE')).status,204);
     const r=await ingestTelemetry(payload('000020'));assert.equal(r.status,'inactive_sensor');assert.equal(r.delta_raw,0);
     const history=await (await request(`/api/v1/telemetria/historico?sensor_id=${sensor}`,tokenA)).json();assert.ok(history.length>=6);
-    const day=new Date().toISOString().slice(0,10);
+    const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     const report=await (await request('/api/v1/relatorios/consumo',tokenA,'POST',{from:day,to:day})).json();
     assert.equal(report.summary.sensors,1);
     await assert.rejects(pool.query('DELETE FROM sensors WHERE id=$1',[sensor]),{code:'23503'});
