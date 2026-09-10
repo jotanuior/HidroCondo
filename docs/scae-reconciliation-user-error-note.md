@@ -1,0 +1,1 @@
+Erro PostgreSQL 23502 observado na reconciliação de usuários quando `customer_accounts.owner_user_id` é nulo. Corrigido pela migration 011 com normalização de `is_owner` para `false`.
