@@ -42,6 +42,11 @@ const usersSyncSchema = z.object({
   users: z.array(userSchema).max(100000)
 });
 
+const structureCondominiumSchema = z.object({
+  scae_condominium_id: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1).max(200)
+});
+
 const structureSensorSchema = z.object({
   scae_sensor_id: z.coerce.number().int().positive(),
   serial: z.string().trim().min(3).max(100),
@@ -58,6 +63,7 @@ const structureSchema = z.object({
   source: z.literal('SCAE').default('SCAE'),
   generated_at: z.string().datetime({ offset: true }),
   snapshot_complete: z.boolean().default(true),
+  condominiums: z.array(structureCondominiumSchema).max(100000).optional(),
   installation_points: z.array(z.object({
     scae_installation_point_id: z.coerce.number().int().positive(),
     scae_condominium_id: z.coerce.number().int().positive(),
@@ -65,6 +71,12 @@ const structureSchema = z.object({
   })).max(100000).default([]),
   sensors: z.array(structureSensorSchema).max(100000).default([])
 });
+
+type ConflictDetail = {
+  entity: 'user' | 'condominium' | 'sensor';
+  scae_id: number;
+  reason: string;
+};
 
 function validSyncKey(req: any) {
   const expected = process.env.SCAE_SYNC_API_KEY;
@@ -87,9 +99,14 @@ function uuidArray(values: string[]) {
   return [...new Set(values)];
 }
 
+function addConflict(list: ConflictDetail[], detail: ConflictDetail) {
+  if (list.length < 100) list.push(detail);
+}
+
 async function ensureScaeCondominium(client: any, scaeId: number, name: string, ownerUserId?: string | null) {
   let cq = await client.query('SELECT * FROM condominiums WHERE scae_condominium_id=$1 FOR UPDATE', [scaeId]);
   let condo = cq.rows[0];
+  const wasInactive = Boolean(condo && condo.active === false);
 
   if (!condo) {
     const nameConflict = await client.query(
@@ -99,15 +116,15 @@ async function ensureScaeCondominium(client: any, scaeId: number, name: string, 
        LIMIT 1`,
       [name]
     );
-    if (nameConflict.rowCount) return { conflict: true as const, condo: null };
+    if (nameConflict.rowCount) return { conflict: true as const, condo: null, reactivated: false };
 
     const account = await client.query(
       'INSERT INTO customer_accounts(name,owner_user_id) VALUES($1,$2) RETURNING id,owner_user_id',
       [name, ownerUserId || null]
     );
     cq = await client.query(
-      `INSERT INTO condominiums(name,account_id,scae_condominium_id,source,scae_synced_at)
-       VALUES($1,$2,$3,'SCAE',now()) RETURNING *`,
+      `INSERT INTO condominiums(name,account_id,scae_condominium_id,source,scae_synced_at,active,scae_present)
+       VALUES($1,$2,$3,'SCAE',now(),true,true) RETURNING *`,
       [name, account.rows[0].id, scaeId]
     );
     condo = cq.rows[0];
@@ -121,7 +138,7 @@ async function ensureScaeCondominium(client: any, scaeId: number, name: string, 
         `UPDATE condominiums
          SET name=$2,account_id=$3,
              source=CASE WHEN source='HIDROCONDO' THEN 'HIDROCONDO+SCAE' ELSE source END,
-             scae_synced_at=now()
+             scae_synced_at=now(),active=true,scae_present=true
          WHERE id=$1 RETURNING *`,
         [condo.id, name, account.rows[0].id]
       );
@@ -131,7 +148,7 @@ async function ensureScaeCondominium(client: any, scaeId: number, name: string, 
         `UPDATE condominiums
          SET name=$2,
              source=CASE WHEN source='HIDROCONDO' THEN 'HIDROCONDO+SCAE' ELSE source END,
-             scae_synced_at=now()
+             scae_synced_at=now(),active=true,scae_present=true
          WHERE id=$1 RETURNING *`,
         [condo.id, name]
       );
@@ -139,7 +156,7 @@ async function ensureScaeCondominium(client: any, scaeId: number, name: string, 
     }
   }
 
-  return { conflict: false as const, condo };
+  return { conflict: false as const, condo, reactivated: wasInactive };
 }
 
 export function registerScaeRoutes(app: Express) {
@@ -158,6 +175,7 @@ export function registerScaeRoutes(app: Express) {
     let conflicts = 0;
     let deactivated = 0;
     let grantsRemoved = 0;
+    const conflictDetails: ConflictDetail[] = [];
     const activeScaeIds: number[] = [];
 
     try {
@@ -198,12 +216,14 @@ export function registerScaeRoutes(app: Express) {
             const candidate = cq.rows[0];
             if (String(candidate.email || '').trim().toLowerCase() !== email) {
               conflicts++;
+              addConflict(conflictDetails, { entity: 'user', scae_id: incoming.scae_user_id, reason: 'cpf_email_mismatch' });
               continue;
             }
             user = candidate;
             merged++;
           } else if ((cq.rowCount ?? 0) > 1) {
             conflicts++;
+            addConflict(conflictDetails, { entity: 'user', scae_id: incoming.scae_user_id, reason: 'cpf_duplicated_in_hidrocondo' });
             continue;
           }
         }
@@ -215,6 +235,7 @@ export function registerScaeRoutes(app: Express) {
           );
           if (emailOwner.rowCount) {
             conflicts++;
+            addConflict(conflictDetails, { entity: 'user', scae_id: incoming.scae_user_id, reason: 'email_already_used' });
             continue;
           }
         }
@@ -261,6 +282,7 @@ export function registerScaeRoutes(app: Express) {
           );
           if (ensured.conflict || !ensured.condo) {
             conflicts++;
+            addConflict(conflictDetails, { entity: 'condominium', scae_id: c.scae_condominium_id, reason: 'name_conflict_requires_manual_link' });
             continue;
           }
 
@@ -367,7 +389,7 @@ export function registerScaeRoutes(app: Express) {
 
       await client.query(
         `UPDATE account_members am
-         SET is_owner=(am.user_id=ca.owner_user_id)
+         SET is_owner=COALESCE(am.user_id=ca.owner_user_id,false)
          FROM customer_accounts ca
          WHERE am.account_id=ca.id AND am.source='SCAE'`
       );
@@ -386,6 +408,7 @@ export function registerScaeRoutes(app: Express) {
         updated,
         merged,
         conflicts,
+        conflict_details: conflictDetails,
         deactivated,
         grants_removed: grantsRemoved,
         snapshot_complete: parsed.data.snapshot_complete
@@ -414,13 +437,40 @@ export function registerScaeRoutes(app: Express) {
     let reactivated = 0;
     let conflicts = 0;
     let ignoredSensors = 0;
+    let condominiumsDeactivated = 0;
+    let condominiumsReactivated = 0;
+    let unitsDeactivated = 0;
+    let unitsReactivated = 0;
+    const conflictDetails: ConflictDetail[] = [];
     const presentSensorIds: number[] = [];
+    const presentInstallationPointIds: number[] = [];
+    const presentCondominiumIds: number[] = [];
 
     try {
       await client.query('BEGIN');
 
+      if (parsed.data.condominiums) {
+        for (const c of parsed.data.condominiums) {
+          presentCondominiumIds.push(c.scae_condominium_id);
+          const ensured = await ensureScaeCondominium(client, c.scae_condominium_id, c.name, null);
+          if (ensured.conflict || !ensured.condo) {
+            conflicts++;
+            addConflict(conflictDetails, { entity: 'condominium', scae_id: c.scae_condominium_id, reason: 'name_conflict_requires_manual_link' });
+            continue;
+          }
+          if (ensured.reactivated) condominiumsReactivated++;
+        }
+      }
+
       for (const p of parsed.data.installation_points) {
-        const cq = await client.query('SELECT id FROM condominiums WHERE scae_condominium_id=$1', [p.scae_condominium_id]);
+        presentInstallationPointIds.push(p.scae_installation_point_id);
+        if (!presentCondominiumIds.includes(p.scae_condominium_id)) presentCondominiumIds.push(p.scae_condominium_id);
+
+        const cq = await client.query(
+          `UPDATE condominiums SET active=true,scae_present=true,scae_synced_at=now()
+           WHERE scae_condominium_id=$1 RETURNING id`,
+          [p.scae_condominium_id]
+        );
         if (!cq.rowCount) continue;
         const condoId = cq.rows[0].id;
 
@@ -429,15 +479,22 @@ export function registerScaeRoutes(app: Express) {
           bq = await client.query("INSERT INTO buildings(condominium_id,name) VALUES($1,'SCAE') RETURNING id", [condoId]);
         }
 
+        const oldUnit = await client.query(
+          'SELECT id,active FROM units WHERE scae_installation_point_id=$1',
+          [p.scae_installation_point_id]
+        );
+        const wasInactive = oldUnit.rowCount ? oldUnit.rows[0].active === false : false;
+
         await client.query(
-          `INSERT INTO units(building_id,identifier,scae_installation_point_id,source,scae_synced_at)
-           VALUES($1,$2,$3,'SCAE',now())
+          `INSERT INTO units(building_id,identifier,scae_installation_point_id,source,scae_synced_at,active,scae_present)
+           VALUES($1,$2,$3,'SCAE',now(),true,true)
            ON CONFLICT(scae_installation_point_id) WHERE scae_installation_point_id IS NOT NULL
            DO UPDATE SET building_id=EXCLUDED.building_id,identifier=EXCLUDED.identifier,
                          source=CASE WHEN units.source='HIDROCONDO' THEN 'HIDROCONDO+SCAE' ELSE units.source END,
-                         scae_synced_at=now()`,
+                         scae_synced_at=now(),active=true,scae_present=true`,
           [bq.rows[0].id, p.description, p.scae_installation_point_id]
         );
+        if (wasInactive) unitsReactivated++;
         units++;
       }
 
@@ -448,13 +505,18 @@ export function registerScaeRoutes(app: Express) {
         }
 
         presentSensorIds.push(s.scae_sensor_id);
+        if (!presentCondominiumIds.includes(s.scae_condominium_id)) presentCondominiumIds.push(s.scae_condominium_id);
 
         const unitQ = s.scae_installation_point_id
           ? await client.query('SELECT id FROM units WHERE scae_installation_point_id=$1', [s.scae_installation_point_id])
           : { rows: [] };
         const unitId = unitQ.rows[0]?.id ?? null;
 
-        const condoQ = await client.query('SELECT id,account_id FROM condominiums WHERE scae_condominium_id=$1', [s.scae_condominium_id]);
+        const condoQ = await client.query(
+          `UPDATE condominiums SET active=true,scae_present=true,scae_synced_at=now()
+           WHERE scae_condominium_id=$1 RETURNING id,account_id`,
+          [s.scae_condominium_id]
+        );
         if (!condoQ.rowCount) continue;
         const accountId = condoQ.rows[0].account_id ?? null;
 
@@ -467,6 +529,7 @@ export function registerScaeRoutes(app: Express) {
             existing = bySerial.rows[0];
             if (existing.scae_sensor_id && Number(existing.scae_sensor_id) !== s.scae_sensor_id) {
               conflicts++;
+              addConflict(conflictDetails, { entity: 'sensor', scae_id: s.scae_sensor_id, reason: 'serial_linked_to_other_scae_sensor' });
               continue;
             }
           }
@@ -483,6 +546,7 @@ export function registerScaeRoutes(app: Express) {
           );
           if (serialOwner.rowCount) {
             conflicts++;
+            addConflict(conflictDetails, { entity: 'sensor', scae_id: s.scae_sensor_id, reason: 'serial_already_used' });
             continue;
           }
 
@@ -540,7 +604,7 @@ export function registerScaeRoutes(app: Express) {
       }
 
       if (parsed.data.snapshot_complete) {
-        const ids = [...new Set(presentSensorIds)];
+        const sensorIds = [...new Set(presentSensorIds)];
         const dq = await client.query(
           `UPDATE sensors
            SET active=false,scae_synced_at=now()
@@ -549,9 +613,35 @@ export function registerScaeRoutes(app: Express) {
              AND active=true
              AND NOT (scae_sensor_id = ANY($1::bigint[]))
            RETURNING id`,
-          [ids]
+          [sensorIds]
         );
         deactivated += dq.rowCount ?? 0;
+
+        const pointIds = [...new Set(presentInstallationPointIds)];
+        const du = await client.query(
+          `UPDATE units
+           SET active=false,scae_present=false,scae_synced_at=now()
+           WHERE scae_installation_point_id IS NOT NULL
+             AND active=true
+             AND NOT (scae_installation_point_id = ANY($1::bigint[]))
+           RETURNING id`,
+          [pointIds]
+        );
+        unitsDeactivated += du.rowCount ?? 0;
+
+        if (parsed.data.condominiums) {
+          const condoIds = [...new Set(presentCondominiumIds)];
+          const dc = await client.query(
+            `UPDATE condominiums
+             SET active=false,scae_present=false,scae_synced_at=now()
+             WHERE scae_condominium_id IS NOT NULL
+               AND active=true
+               AND NOT (scae_condominium_id = ANY($1::bigint[]))
+             RETURNING id`,
+            [condoIds]
+          );
+          condominiumsDeactivated += dc.rowCount ?? 0;
+        }
       }
 
       await client.query('COMMIT');
@@ -562,10 +652,16 @@ export function registerScaeRoutes(app: Express) {
         moved,
         deactivated,
         reactivated,
+        condominiums_deactivated: condominiumsDeactivated,
+        condominiums_reactivated: condominiumsReactivated,
+        units_deactivated: unitsDeactivated,
+        units_reactivated: unitsReactivated,
         conflicts,
+        conflict_details: conflictDetails,
         ignored_sensors: ignoredSensors,
         sensor_filter: '09',
-        snapshot_complete: parsed.data.snapshot_complete
+        snapshot_complete: parsed.data.snapshot_complete,
+        condominiums_snapshot_received: Array.isArray(parsed.data.condominiums)
       });
     } catch (e) {
       await client.query('ROLLBACK');
