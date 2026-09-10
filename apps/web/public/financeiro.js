@@ -28,7 +28,22 @@
   document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>close(b.dataset.close)));
   document.querySelectorAll('.fin-modal').forEach(m=>m.addEventListener('mousedown',e=>{if(e.target===m)close(m.id)}));
 
-  async function loadAll(){try{[plans,clients,charges]=await Promise.all([api('/api/v1/financeiro/planos'),api('/api/v1/financeiro/clientes'),api('/api/v1/financeiro/cobrancas')]);renderPlans();renderClients();renderCharges();renderDashboard();await loadConfig()}catch(e){alertMsg(e.message,'err')}}
+  async function loadAll(){
+    await loadConfig();
+    try{
+      [plans,clients,charges]=await Promise.all([
+        api('/api/v1/financeiro/planos'),
+        api('/api/v1/financeiro/clientes'),
+        api('/api/v1/financeiro/cobrancas')
+      ]);
+      renderPlans();
+      renderClients();
+      renderCharges();
+      renderDashboard();
+    }catch(e){
+      alertMsg(e.message,'err');
+    }
+  }
   async function loadConfig(){try{const c=await api('/api/v1/financeiro/configuracao');$('#cfgApi').textContent=c.asaas_configured?'Configurada':'Não configurada';$('#cfgApi').className=`fin-badge ${c.asaas_configured?'ok':'bad'}`;$('#cfgEnv').textContent=c.environment==='production'?'Produção':'Sandbox';$('#cfgWebhook').textContent=c.webhook_configured?'Configurado':'Não configurado';$('#cfgWebhook').className=`fin-badge ${c.webhook_configured?'ok':'bad'}`}catch(e){alertMsg(e.message,'err')}}
 
   function renderDashboard(){

@@ -105,7 +105,7 @@ export function registerBillingRoutes(app:Express){
 
   app.get('/api/v1/financeiro/clientes',requireAuth,async(req:AuthenticatedRequest,res)=>{
     if(!isSuper(req))return forbidden(res);
-    const r=await pool.query(`SELECT ca.id,ca.name,ca.asaas_customer_id,ca.billing_status,ca.billing_notes,ca.owner_user_id,u.name owner_name,u.email owner_email,u.cpf_cnpj owner_document,u.phone owner_phone,COUNT(DISTINCT s.id) FILTER(WHERE s.active=true)::int active_sensors,bs.id subscription_id,bp.name plan_name,bs.status subscription_status,bs.custom_amount FROM customer_accounts ca LEFT JOIN users u ON u.id=ca.owner_user_id LEFT JOIN sensors s ON s.account_id=ca.id LEFT JOIN LATERAL (SELECT * FROM billing_subscriptions x WHERE x.account_id=ca.id AND x.status IN('draft','active','overdue','paused') ORDER BY x.created_at DESC LIMIT 1) bs ON true LEFT JOIN billing_plans bp ON bp.id=bs.plan_id GROUP BY ca.id,u.id,bs.id,bp.name ORDER BY ca.name`);res.json(r.rows);
+    const r=await pool.query(`SELECT ca.id,ca.name,ca.asaas_customer_id,ca.billing_status,ca.billing_notes,ca.owner_user_id,u.name owner_name,u.email owner_email,u.cpf_cnpj owner_document,u.phone owner_phone,COUNT(DISTINCT s.id) FILTER(WHERE s.active=true)::int active_sensors,bs.id subscription_id,bp.name plan_name,bs.status subscription_status,bs.custom_amount FROM customer_accounts ca LEFT JOIN users u ON u.id=ca.owner_user_id LEFT JOIN sensors s ON s.account_id=ca.id LEFT JOIN LATERAL (SELECT * FROM billing_subscriptions x WHERE x.account_id=ca.id AND x.status IN('draft','active','overdue','paused') ORDER BY x.created_at DESC LIMIT 1) bs ON true LEFT JOIN billing_plans bp ON bp.id=bs.plan_id GROUP BY ca.id,u.id,bs.id,bs.status,bs.custom_amount,bp.name ORDER BY ca.name`);res.json(r.rows);
   });
 
   app.post('/api/v1/financeiro/clientes/:id/asaas',requireAuth,async(req:AuthenticatedRequest,res)=>{
@@ -115,7 +115,81 @@ export function registerBillingRoutes(app:Express){
     const p=z.object({name:z.string().min(2).optional(),cpfCnpj:z.string().min(11).optional(),email:z.string().email().optional(),mobilePhone:z.string().optional(),notificationDisabled:z.boolean().optional()}).safeParse(req.body||{});if(!p.success)return res.status(400).json({error:'Dados do cliente inválidos'});
     const a=account.rows[0];const body={name:p.data.name||a.owner_name||a.name,cpfCnpj:p.data.cpfCnpj||a.owner_document||undefined,email:p.data.email||a.owner_email||undefined,mobilePhone:p.data.mobilePhone||a.owner_phone||undefined,externalReference:a.id,notificationDisabled:p.data.notificationDisabled??false};
     if(!body.cpfCnpj)return res.status(400).json({error:'CPF/CNPJ necessário para cadastrar o cliente no Asaas'});
-    const remote=await asaas('/customers',{method:'POST',body:JSON.stringify(body)});await pool.query(`UPDATE customer_accounts SET asaas_customer_id=$2,billing_status=CASE WHEN billing_status='inactive' THEN 'ready' ELSE billing_status END WHERE id=$1`,[a.id,remote.id]);await audit(req,'asaas_customer_create','customer_account',a.id,{asaas_customer_id:remote.id});res.status(201).json(remote);
+    // Primeiro procura no Asaas pelo identificador único do HidroCondo.
+    // Isso torna a sincronização idempotente e evita clientes duplicados.
+    const lookup=await asaas(`/customers?externalReference=${encodeURIComponent(a.id)}&limit=100`);
+    const matches=Array.isArray(lookup?.data)
+      ? lookup.data.filter((c:any)=>String(c.externalReference||'')===String(a.id))
+      : [];
+
+    if(matches.length>0){
+      // Se já existe no Asaas, apenas reconcilia/vincula.
+      // Em caso de duplicidade histórica, preserva o cliente já vinculado
+      // localmente quando possível; caso contrário usa o primeiro retornado.
+      const chosen=
+        matches.find((c:any)=>c.id===a.asaas_customer_id)
+        || matches[0];
+
+      await pool.query(
+        `UPDATE customer_accounts
+         SET asaas_customer_id=$2,
+             billing_status=CASE
+               WHEN billing_status='inactive' THEN 'ready'
+               ELSE billing_status
+             END
+         WHERE id=$1`,
+        [a.id,chosen.id]
+      );
+
+      await audit(
+        req,
+        matches.length>1?'asaas_customer_duplicate_detected':'asaas_customer_link',
+        'customer_account',
+        a.id,
+        {
+          asaas_customer_id:chosen.id,
+          matches:matches.map((c:any)=>c.id),
+          duplicate_count:matches.length
+        }
+      );
+
+      return res.json({
+        ...chosen,
+        existing:true,
+        reconciled:true,
+        duplicate_detected:matches.length>1,
+        duplicate_count:matches.length,
+        duplicate_ids:matches.map((c:any)=>c.id)
+      });
+    }
+
+    // Só cria quando realmente não existe nenhum cliente no Asaas
+    // com o externalReference desta conta.
+    const remote=await asaas('/customers',{
+      method:'POST',
+      body:JSON.stringify(body)
+    });
+
+    await pool.query(
+      `UPDATE customer_accounts
+       SET asaas_customer_id=$2,
+           billing_status=CASE
+             WHEN billing_status='inactive' THEN 'ready'
+             ELSE billing_status
+           END
+       WHERE id=$1`,
+      [a.id,remote.id]
+    );
+
+    await audit(
+      req,
+      'asaas_customer_create',
+      'customer_account',
+      a.id,
+      {asaas_customer_id:remote.id}
+    );
+
+    res.status(201).json(remote);
   });
 
   app.post('/api/v1/financeiro/assinaturas',requireAuth,async(req:AuthenticatedRequest,res)=>{
