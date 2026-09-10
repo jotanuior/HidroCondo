@@ -20,6 +20,10 @@
       if (!useLegacy) {
         localStorage.setItem('hidrocondo.frontend', 'v2');
         await import('/src/v2-complete.tsx');
+        const script = document.createElement('script');
+        script.src = '/financeiro-menu.js';
+        script.defer = true;
+        document.body.appendChild(script);
       } else {
         await import('/src/main.tsx');
         const script = document.createElement('script');

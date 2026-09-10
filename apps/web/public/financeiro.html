@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#142249" />
+  <title>Financeiro — HidroCondo</title>
+  <link rel="stylesheet" href="/financeiro.css" />
+</head>
+<body>
+  <div class="fin-shell">
+    <aside class="fin-sidebar">
+      <div class="fin-brand"><div class="fin-brand-mark">💧</div><div><strong>HidroCondo</strong><span>Financeiro e cobranças</span></div></div>
+      <nav class="fin-nav">
+        <button class="active" data-section="dashboard">Visão geral</button>
+        <button data-section="planos">Planos</button>
+        <button data-section="clientes">Clientes</button>
+        <button data-section="cobrancas">Cobranças</button>
+        <button data-section="configuracao">Asaas</button>
+      </nav>
+      <div class="fin-sidebar-bottom"><a class="fin-back" href="/?v2=1">← Voltar ao HidroCondo</a></div>
+    </aside>
+    <main class="fin-main">
+      <div id="alert" class="fin-alert"></div>
+      <section id="dashboard" class="fin-section active">
+        <div class="fin-head"><div><h1>Financeiro</h1><p>Planos, recorrências e cobranças automáticas dos clientes HidroCondo.</p></div><button class="fin-btn secondary" id="refreshAll">Atualizar</button></div>
+        <div class="fin-grid">
+          <div class="fin-card fin-kpi"><span>Clientes</span><strong id="kpiClientes">—</strong></div>
+          <div class="fin-card fin-kpi"><span>Com cobrança ativa</span><strong id="kpiAtivos">—</strong></div>
+          <div class="fin-card fin-kpi"><span>Inadimplentes</span><strong id="kpiOverdue">—</strong></div>
+          <div class="fin-card fin-kpi"><span>Planos ativos</span><strong id="kpiPlanos">—</strong></div>
+        </div>
+        <div class="fin-section-head"><h2>Próximas cobranças</h2></div>
+        <div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>Cliente</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th></tr></thead><tbody id="dashCharges"></tbody></table></div>
+      </section>
+
+      <section id="planos" class="fin-section">
+        <div class="fin-head"><div><h1>Planos</h1><p>Defina cobrança única, mensal, trimestral, semestral, anual ou personalizada.</p></div><button class="fin-btn primary" id="newPlan">+ Novo plano</button></div>
+        <div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>Plano</th><th>Periodicidade</th><th>Modelo</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="plansTable"></tbody></table></div>
+      </section>
+
+      <section id="clientes" class="fin-section">
+        <div class="fin-head"><div><h1>Clientes</h1><p>Vincule cada conta HidroCondo ao Asaas e atribua seu plano de cobrança.</p></div></div>
+        <div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>Cliente</th><th>Responsável</th><th>Sensores ativos</th><th>Asaas</th><th>Plano</th><th>Status</th><th>Ações</th></tr></thead><tbody id="clientsTable"></tbody></table></div>
+      </section>
+
+      <section id="cobrancas" class="fin-section">
+        <div class="fin-head"><div><h1>Cobranças</h1><p>Cobranças avulsas e cobranças recebidas automaticamente pelos Webhooks do Asaas.</p></div><button class="fin-btn primary" id="newCharge">+ Cobrança avulsa</button></div>
+        <div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>Cliente</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Forma</th><th>Status</th><th>Link</th></tr></thead><tbody id="chargesTable"></tbody></table></div>
+      </section>
+
+      <section id="configuracao" class="fin-section">
+        <div class="fin-head"><div><h1>Integração Asaas</h1><p>A chave API e o token do Webhook ficam somente no servidor; nunca são exibidos nesta tela.</p></div></div>
+        <div class="fin-config">
+          <div class="fin-card"><h3>Estado da integração</h3><p>API: <span id="cfgApi" class="fin-badge off">Carregando</span></p><p>Ambiente: <strong id="cfgEnv">—</strong></p><p>Webhook: <span id="cfgWebhook" class="fin-badge off">Carregando</span></p></div>
+          <div class="fin-card"><h3>Variáveis do servidor</h3><div class="fin-code">ASAAS_BASE_URL=https://api-sandbox.asaas.com/v3<br>ASAAS_API_KEY=...<br>ASAAS_WEBHOOK_TOKEN=token-seguro-32+-caracteres</div><p class="fin-muted">Na produção, altere a URL base para https://api.asaas.com/v3 e use uma chave criada no ambiente de produção.</p></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="planModal" class="fin-modal"><div class="fin-modal-card"><div class="fin-modal-head"><h3 id="planModalTitle">Novo plano</h3><button class="fin-close" data-close="planModal">×</button></div><form id="planForm" class="fin-form"><input type="hidden" id="planId"/><label>Nome<input class="fin-input" id="planName" required /></label><label>Descrição<textarea class="fin-textarea" id="planDescription"></textarea></label><div class="fin-form-row"><label>Periodicidade<select class="fin-select" id="planType"><option value="ONE_TIME">Cobrança única</option><option value="MONTHLY">Mensal</option><option value="QUARTERLY">Trimestral</option><option value="SEMIANNUALLY">Semestral</option><option value="YEARLY">Anual</option><option value="CUSTOM">Personalizada</option></select></label><label>Modelo de preço<select class="fin-select" id="pricingModel"><option value="FIXED">Valor fixo</option><option value="PER_ACTIVE_SENSOR">Base + por sensor ativo</option><option value="TIERED">Por faixa de sensores</option></select></label></div><div class="fin-form-row"><label>Valor base (R$)<input class="fin-input" id="planAmount" type="number" min="0" step="0.01" value="0" required /></label><label>Valor por sensor (R$)<input class="fin-input" id="planUnitAmount" type="number" min="0" step="0.01" /></label></div><label id="tiersWrap">Faixas de sensores <span class="fin-muted">Uma linha por faixa: mínimo,máximo,valor. Use máximo vazio para faixa aberta. Ex.: 1,10,99.90</span><textarea class="fin-textarea" id="planTiers" placeholder="1,10,99.90&#10;11,30,149.90&#10;31,,249.90"></textarea></label><label><input type="checkbox" id="planActive" checked /> Plano ativo</label><div class="fin-form-actions"><button type="button" class="fin-btn secondary" data-close="planModal">Cancelar</button><button class="fin-btn primary">Salvar plano</button></div></form></div></div>
+
+  <div id="subscriptionModal" class="fin-modal"><div class="fin-modal-card"><div class="fin-modal-head"><h3>Configurar cobrança do cliente</h3><button class="fin-close" data-close="subscriptionModal">×</button></div><form id="subscriptionForm" class="fin-form"><input type="hidden" id="subAccountId"/><label>Plano<select class="fin-select" id="subPlan" required></select></label><div class="fin-form-row"><label>Primeiro vencimento<input class="fin-input" type="date" id="subStart" required/></label><label>Forma de pagamento<select class="fin-select" id="subPayment"><option value="UNDEFINED">Cliente escolhe</option><option value="BOLETO">Boleto</option><option value="PIX">Pix</option><option value="CREDIT_CARD">Cartão</option></select></label></div><div class="fin-form-row"><label>Valor personalizado (opcional)<input class="fin-input" type="number" min="0" step="0.01" id="subCustomAmount"/></label><label>Dia de vencimento<input class="fin-input" type="number" min="1" max="31" id="subDueDay"/></label></div><div class="fin-form-row"><label>Desconto<select class="fin-select" id="subDiscountType"><option value="">Sem desconto</option><option value="PERCENT">Percentual</option><option value="FIXED">Valor fixo</option></select></label><label>Valor do desconto<input class="fin-input" type="number" min="0" step="0.01" id="subDiscountValue"/></label></div><div class="fin-form-row"><label>Desconto válido até<input class="fin-input" type="date" id="subDiscountUntil"/></label><label>Suspender após atraso (dias)<input class="fin-input" type="number" min="0" id="subSuspendAfter"/></label></div><label><input type="checkbox" id="subSync" checked /> Criar assinatura recorrente no Asaas agora</label><div class="fin-form-actions"><button type="button" class="fin-btn secondary" data-close="subscriptionModal">Cancelar</button><button class="fin-btn primary">Salvar cobrança</button></div></form></div></div>
+
+  <div id="chargeModal" class="fin-modal"><div class="fin-modal-card"><div class="fin-modal-head"><h3>Nova cobrança avulsa</h3><button class="fin-close" data-close="chargeModal">×</button></div><form id="chargeForm" class="fin-form"><label>Cliente<select class="fin-select" id="chargeAccount" required></select></label><label>Descrição<input class="fin-input" id="chargeDescription" required/></label><div class="fin-form-row"><label>Valor (R$)<input class="fin-input" type="number" min="0.01" step="0.01" id="chargeAmount" required/></label><label>Vencimento<input class="fin-input" type="date" id="chargeDue" required/></label></div><label>Forma de pagamento<select class="fin-select" id="chargePayment"><option value="UNDEFINED">Cliente escolhe</option><option value="BOLETO">Boleto</option><option value="PIX">Pix</option><option value="CREDIT_CARD">Cartão</option></select></label><label><input type="checkbox" id="chargeSync" checked /> Criar cobrança no Asaas agora</label><div class="fin-form-actions"><button type="button" class="fin-btn secondary" data-close="chargeModal">Cancelar</button><button class="fin-btn primary">Criar cobrança</button></div></form></div></div>
+
+  <script src="/financeiro.js" defer></script>
+</body>
+</html>
